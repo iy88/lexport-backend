@@ -46,5 +46,13 @@ def create_app(config_name=None):
 
     with app.app_context():
         db.create_all()
+        db.session.execute(db.text(
+            "CREATE OR REPLACE VIEW platform_stats AS "
+            "SELECT 'countries' AS id, CAST(COUNT(*) AS CHAR) AS value, '覆盖国家（持续拓展中）' AS label_zh, 1 AS sort_order FROM countries "
+            "UNION ALL SELECT 'laws', CAST(COUNT(*) AS CHAR), '法规条文收录', 2 FROM laws "
+            "UNION ALL SELECT 'scenes', CAST(COUNT(*) AS CHAR), '高频合规场景', 3 FROM compliance_scenes "
+            "UNION ALL SELECT 'agencies', CAST(COUNT(*) AS CHAR), '合作合规机构', 4 FROM agencies"
+        ))
+        db.session.commit()
 
     return app

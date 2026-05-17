@@ -10,7 +10,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), nullable=True, unique=True, index=True)
     email_verified = db.Column(db.Boolean, default=False, nullable=False)
-    role = db.Column(db.Enum('user', 'admin', name='user_role_enum'), default='user', nullable=False)
+    role = db.Column(db.Enum('user', 'admin', 'editor', name='user_role_enum'), default='user', nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), nullable=False)
     updated_at = db.Column(
         db.DateTime,

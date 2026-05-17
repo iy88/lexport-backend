@@ -18,6 +18,7 @@ class News(db.Model):
     change_desc = db.Column(db.Text)
     impact = db.Column(db.Text)
     advice = db.Column(db.Text)
+    status = db.Column(db.Enum('draft', 'published', name='content_status_enum'), default='published', nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), nullable=False)
 
 

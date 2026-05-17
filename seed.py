@@ -8,7 +8,6 @@ from app.models import (
     CompanySize, BudgetRange,
     AgencyCategory, AgencyScene, Agency,
     News, NewsTag, NewsTagRelation,
-    PlatformStat, User,
 )
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'lexport-frontend', 'docs', 'data.json')
@@ -33,7 +32,6 @@ def seed():
         Country.query.delete()
         CompanySize.query.delete()
         BudgetRange.query.delete()
-        PlatformStat.query.delete()
         db.session.commit()
 
         # -- Insert in FK dependency order --
@@ -109,12 +107,6 @@ def seed():
             db.session.commit()
             news_count += 1
         print(f'news: {news_count} rows')
-
-        # platform_stats
-        for item in data['platform_stats']:
-            db.session.add(PlatformStat(**item))
-        db.session.commit()
-        print(f'platform_stats: {len(data["platform_stats"])} rows')
 
         print('\nSeed complete.')
 

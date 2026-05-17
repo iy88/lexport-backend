@@ -22,4 +22,5 @@ class Law(db.Model):
     effective_date = db.Column(db.Date)
     summary = db.Column(db.Text)
     full_text_url = db.Column(db.String(500))
+    status = db.Column(db.Enum('draft', 'published', name='content_status_enum'), default='published', nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), nullable=False)

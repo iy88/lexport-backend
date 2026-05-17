@@ -31,4 +31,5 @@ class Agency(db.Model):
     business = db.Column(db.Text)
     advantage = db.Column(db.Text)
     highlight = db.Column(db.String(50))
+    status = db.Column(db.Enum('draft', 'published', name='content_status_enum'), default='published', nullable=False)
     sort_order = db.Column(db.Integer, default=0)
