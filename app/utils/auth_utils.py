@@ -1,10 +1,12 @@
 from functools import wraps
-from flask import request, g
-from app.models.user import User
-from app.extensions import db
-from app.utils.jwt_utils import decode_token
-from app.utils.errors import AuthenticationError
+
 import jwt as pyjwt
+from flask import request, g
+
+from app.extensions import db
+from app.models.user import User
+from app.utils.errors import AuthenticationError
+from app.utils.jwt_utils import decode_token
 
 
 def jwt_required(func=None, *, role=None):
@@ -34,6 +36,7 @@ def jwt_required(func=None, *, role=None):
 
             g.current_user = user
             return f(*args, **kwargs)
+
         return wrapper
 
     if func is not None:

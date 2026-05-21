@@ -4,15 +4,15 @@
 
 ## 技术栈
 
-| 组件 | 选型 |
-|------|------|
-| 语言 | Python 3.12 |
-| 框架 | Flask 3.x |
-| 数据库 | MySQL |
+| 组件  | 选型                            |
+|-----|-------------------------------|
+| 语言  | Python 3.12                   |
+| 框架  | Flask 3.x                     |
+| 数据库 | MySQL                         |
 | ORM | SQLAlchemy (Flask-SQLAlchemy) |
-| 认证 | JWT + bcrypt |
-| 邮件 | Flask-Mail (SMTP) |
-| 配置 | python-dotenv |
+| 认证  | JWT + bcrypt                  |
+| 邮件  | Flask-Mail (SMTP)             |
+| 配置  | python-dotenv                 |
 
 ## 快速开始
 
@@ -47,7 +47,8 @@ docs/
 
 ### Service 层
 
-路由 (`routes/`) 负责解析 HTTP 请求、调用 service、格式化 JSON 响应。所有业务逻辑（校验、数据库操作、邮件发送）集中在 `services/` 中，可以脱离 HTTP 上下文独立测试。
+路由 (`routes/`) 负责解析 HTTP 请求、调用 service、格式化 JSON 响应。所有业务逻辑（校验、数据库操作、邮件发送）集中在
+`services/` 中，可以脱离 HTTP 上下文独立测试。
 
 ### Blueprint 路由
 
@@ -71,9 +72,9 @@ docs/
 
 ### JWT 设计
 
-| 类型 | 用途 | 有效期   |
-|------|------|-------|
-| `access` | 登录会话 | 1 天   |
+| 类型             | 用途   | 有效期   |
+|----------------|------|-------|
+| `access`       | 登录会话 | 1 天   |
 | `verify_email` | 邮箱验证 | 30 分钟 |
 
 JWT payload 中包含 `type` 字段，防止 token 类型混淆。
@@ -91,4 +92,4 @@ JWT payload 中包含 `type` 字段，防止 token 类型混淆。
 ## 数据库设计
 
 > 备份: `mysqldump --set-gtid-purged=OFF -u root -p lexport > initial.sql`
-详见 [docs/db.md](docs/db.md)。
+> 详见 [docs/db.md](docs/db.md)。

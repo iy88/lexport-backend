@@ -1,12 +1,14 @@
-from app.models.user import User
-from app.extensions import db, mail
-from app.utils.validators import validate_username, validate_password, validate_email
-from app.utils.jwt_utils import generate_access_token, generate_verification_token, decode_token
-from app.utils.errors import ValidationError, AuthenticationError, ConflictError, NotFoundError
-from flask_mail import Message
-from flask import current_app
-import jwt as pyjwt
 import threading
+
+import jwt as pyjwt
+from flask import current_app
+from flask_mail import Message
+
+from app.extensions import db, mail
+from app.models.user import User
+from app.utils.errors import ValidationError, AuthenticationError, ConflictError, NotFoundError
+from app.utils.jwt_utils import generate_access_token, generate_verification_token, decode_token
+from app.utils.validators import validate_username, validate_password, validate_email
 
 
 def register(username, password, email=None):

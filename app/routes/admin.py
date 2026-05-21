@@ -1,12 +1,13 @@
 from flask import Blueprint, request, jsonify, g
-from app.utils.auth_utils import jwt_required
-from app.utils.errors import AppError, NotFoundError
-from app.services import admin_service
+
+from app.extensions import db
+from app.models.agency import Agency
 from app.models.law import Law
 from app.models.news import News
-from app.models.agency import Agency
 from app.models.user import User
-from app.extensions import db
+from app.services import admin_service
+from app.utils.auth_utils import jwt_required
+from app.utils.errors import AppError, NotFoundError
 
 admin_bp = Blueprint('admin', __name__)
 

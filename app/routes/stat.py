@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify
+
 from app.services import stat_service
 
 stat_bp = Blueprint('stat', __name__)

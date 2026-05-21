@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+
 from app.services import law_service
 
 law_bp = Blueprint('law', __name__)

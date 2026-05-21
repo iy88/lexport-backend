@@ -1,6 +1,5 @@
-from app.models.news import News, NewsTag, NewsTagRelation
 from app.models.country import Country
-from app.extensions import db
+from app.models.news import News, NewsTag, NewsTagRelation
 
 
 def get_news(page=1, per_page=20, type=None, country_id=None, keyword=None):

@@ -1,5 +1,5 @@
-from app.models.agency import Agency, AgencyCategory, AgencyScene
 from app.extensions import db
+from app.models.agency import Agency, AgencyCategory, AgencyScene
 
 
 def get_agencies(page=1, per_page=20, scene_id=None, category_id=None, keyword=None):

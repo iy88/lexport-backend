@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+
 from app.services import auth_service
 from app.utils.errors import AppError
 

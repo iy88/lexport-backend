@@ -1,6 +1,5 @@
-from app.models.law import Law, ComplianceScene
 from app.models.country import Country
-from app.extensions import db
+from app.models.law import Law, ComplianceScene
 
 
 def get_laws(page=1, per_page=20, country_id=None, scene_id=None, keyword=None):

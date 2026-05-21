@@ -1,9 +1,9 @@
 from app.extensions import db
-from app.utils.errors import NotFoundError
-from app.models.law import ComplianceScene
-from app.models.country import Country
-from app.models.news import NewsTag
 from app.models.agency import AgencyCategory, AgencyScene
+from app.models.country import Country
+from app.models.law import ComplianceScene
+from app.models.news import NewsTag
+from app.utils.errors import NotFoundError
 
 
 def list_items(model, resource, page=1, per_page=20, status=None):
@@ -26,7 +26,8 @@ def _ref_data(resource):
     if resource == 'laws':
         return {
             'countries': [{'id': c.id, 'name_zh': c.name_zh} for c in Country.query.order_by(Country.sort_order).all()],
-            'scenes': [{'id': s.id, 'label_zh': s.label_zh} for s in ComplianceScene.query.order_by(ComplianceScene.sort_order).all()],
+            'scenes': [{'id': s.id, 'label_zh': s.label_zh} for s in
+                       ComplianceScene.query.order_by(ComplianceScene.sort_order).all()],
         }
     if resource == 'news':
         return {

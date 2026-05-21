@@ -1,6 +1,7 @@
-from flask import Blueprint, request, jsonify, g
-from app.utils.auth_utils import jwt_required
+from flask import Blueprint, jsonify, g
+
 from app.services import user_service
+from app.utils.auth_utils import jwt_required
 from app.utils.errors import AppError
 
 user_bp = Blueprint('user', __name__)

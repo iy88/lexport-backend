@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+
 from app.services import news_service
 
 news_bp = Blueprint('news', __name__)

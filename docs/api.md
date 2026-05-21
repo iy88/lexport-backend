@@ -5,6 +5,7 @@
 所有接口统一返回 JSON，格式如下：
 
 **成功响应：**
+
 ```json
 {
     "success": true,
@@ -14,6 +15,7 @@
 ```
 
 **错误响应：**
+
 ```json
 {
     "success": false,
@@ -32,24 +34,24 @@
 
 ### 请求参数
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `username` | string | 是 | 用户名，3-50 位字母、数字或下划线 |
-| `password` | string | 是 | 密码，不少于 8 位，需包含字母和数字 |
-| `email` | string | 否 | 邮箱地址 |
+| 字段         | 类型     | 必填 | 说明                  |
+|------------|--------|----|---------------------|
+| `username` | string | 是  | 用户名，3-50 位字母、数字或下划线 |
+| `password` | string | 是  | 密码，不少于 8 位，需包含字母和数字 |
+| `email`    | string | 否  | 邮箱地址                |
 
 ### 响应状态
 
-| HTTP 状态码 | 错误码 | 消息 | 说明 |
-|-------------|--------|------|------|
-| 201 | - | 注册成功 | 注册成功，返回用户信息和 JWT |
-| 400 | `VALIDATION_ERROR` | 用户名需为3-50位字母、数字或下划线 | 用户名格式不合法 |
-| 400 | `VALIDATION_ERROR` | 密码长度不少于8位 | 密码过短 |
-| 400 | `VALIDATION_ERROR` | 密码需包含字母 | 密码缺少字母 |
-| 400 | `VALIDATION_ERROR` | 密码需包含数字 | 密码缺少数字 |
-| 400 | `VALIDATION_ERROR` | 请输入正确的邮箱格式 | 邮箱格式不合法 |
-| 409 | `CONFLICT` | 用户名已被注册 | 用户名重复 |
-| 409 | `CONFLICT` | 邮箱已被注册 | 邮箱重复 |
+| HTTP 状态码 | 错误码                | 消息                  | 说明               |
+|----------|--------------------|---------------------|------------------|
+| 201      | -                  | 注册成功                | 注册成功，返回用户信息和 JWT |
+| 400      | `VALIDATION_ERROR` | 用户名需为3-50位字母、数字或下划线 | 用户名格式不合法         |
+| 400      | `VALIDATION_ERROR` | 密码长度不少于8位           | 密码过短             |
+| 400      | `VALIDATION_ERROR` | 密码需包含字母             | 密码缺少字母           |
+| 400      | `VALIDATION_ERROR` | 密码需包含数字             | 密码缺少数字           |
+| 400      | `VALIDATION_ERROR` | 请输入正确的邮箱格式          | 邮箱格式不合法          |
+| 409      | `CONFLICT`         | 用户名已被注册             | 用户名重复            |
+| 409      | `CONFLICT`         | 邮箱已被注册              | 邮箱重复             |
 
 ### 请求示例
 
@@ -99,18 +101,18 @@ curl -X POST http://localhost:5000/api/auth/register \
 
 ### 请求参数
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `login_id` | string | 是 | 用户名或邮箱 |
-| `password` | string | 是 | 密码 |
+| 字段         | 类型     | 必填 | 说明     |
+|------------|--------|----|--------|
+| `login_id` | string | 是  | 用户名或邮箱 |
+| `password` | string | 是  | 密码     |
 
 ### 响应状态
 
-| HTTP 状态码 | 错误码 | 消息 | 说明 |
-|-------------|--------|------|------|
-| 200 | - | 登录成功 | 登录成功，返回用户信息和 JWT |
-| 400 | `VALIDATION_ERROR` | 请填写登录账号和密码 | 缺少必填字段 |
-| 401 | `AUTH_ERROR` | 用户名或密码错误 | 用户不存在或密码错误 |
+| HTTP 状态码 | 错误码                | 消息         | 说明               |
+|----------|--------------------|------------|------------------|
+| 200      | -                  | 登录成功       | 登录成功，返回用户信息和 JWT |
+| 400      | `VALIDATION_ERROR` | 请填写登录账号和密码 | 缺少必填字段           |
+| 401      | `AUTH_ERROR`       | 用户名或密码错误   | 用户不存在或密码错误       |
 
 ### 请求示例
 
@@ -156,19 +158,19 @@ curl -X POST http://localhost:5000/api/auth/login \
 
 ### 请求参数
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `token` | string | 是 | 注册时通过邮件发送的验证 JWT |
+| 字段      | 类型     | 必填 | 说明               |
+|---------|--------|----|------------------|
+| `token` | string | 是  | 注册时通过邮件发送的验证 JWT |
 
 ### 响应状态
 
-| HTTP 状态码 | 错误码 | 消息 | 说明 |
-|-------------|--------|------|------|
-| 200 | - | 邮箱验证成功 | 验证成功，邮箱标记为已验证 |
-| 400 | `VALIDATION_ERROR` | 缺少验证令牌 | 未提供 token 参数 |
-| 400 | `VALIDATION_ERROR` | 验证链接已过期 | JWT 已过期（30 分钟时限） |
-| 400 | `VALIDATION_ERROR` | 无效的验证令牌 | JWT 解析失败或类型不匹配 |
-| 404 | `NOT_FOUND` | 用户不存在 | 用户已被删除 |
+| HTTP 状态码 | 错误码                | 消息      | 说明               |
+|----------|--------------------|---------|------------------|
+| 200      | -                  | 邮箱验证成功  | 验证成功，邮箱标记为已验证    |
+| 400      | `VALIDATION_ERROR` | 缺少验证令牌  | 未提供 token 参数     |
+| 400      | `VALIDATION_ERROR` | 验证链接已过期 | JWT 已过期（30 分钟时限） |
+| 400      | `VALIDATION_ERROR` | 无效的验证令牌 | JWT 解析失败或类型不匹配   |
+| 404      | `NOT_FOUND`        | 用户不存在   | 用户已被删除           |
 
 ### 请求示例
 
@@ -198,19 +200,19 @@ curl -X POST http://localhost:5000/api/auth/verify-email \
 
 ### 请求头
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `Authorization` | string | 是 | `Bearer {access_token}` |
+| 字段              | 类型     | 必填 | 说明                      |
+|-----------------|--------|----|-------------------------|
+| `Authorization` | string | 是  | `Bearer {access_token}` |
 
 ### 响应状态
 
-| HTTP 状态码 | 错误码 | 消息 | 说明 |
-|-------------|--------|------|------|
-| 200 | - | 成功 | 返回当前用户信息 |
-| 401 | `AUTH_ERROR` | 缺少认证令牌 | 未提供 Authorization 头 |
-| 401 | `AUTH_ERROR` | 认证令牌已过期 | JWT 过期 |
-| 401 | `AUTH_ERROR` | 无效的认证令牌 | JWT 解析失败 |
-| 401 | `AUTH_ERROR` | 用户不存在 | 用户已删除 |
+| HTTP 状态码 | 错误码          | 消息      | 说明                  |
+|----------|--------------|---------|---------------------|
+| 200      | -            | 成功      | 返回当前用户信息            |
+| 401      | `AUTH_ERROR` | 缺少认证令牌  | 未提供 Authorization 头 |
+| 401      | `AUTH_ERROR` | 认证令牌已过期 | JWT 过期              |
+| 401      | `AUTH_ERROR` | 无效的认证令牌 | JWT 解析失败            |
+| 401      | `AUTH_ERROR` | 用户不存在   | 用户已删除               |
 
 ### 请求示例
 
@@ -246,19 +248,19 @@ curl -X GET http://localhost:5000/api/user/profile \
 
 ### 请求参数（Query）
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `page` | int | 否 | 页码，默认 1 |
-| `per_page` | int | 否 | 每页条数，默认 20 |
-| `country_id` | string | 否 | 按国家筛选，如 `ZA` |
-| `scene_id` | string | 否 | 按场景筛选，如 `labor` |
-| `keyword` | string | 否 | 按标题模糊搜索 |
+| 字段           | 类型     | 必填 | 说明              |
+|--------------|--------|----|-----------------|
+| `page`       | int    | 否  | 页码，默认 1         |
+| `per_page`   | int    | 否  | 每页条数，默认 20      |
+| `country_id` | string | 否  | 按国家筛选，如 `ZA`    |
+| `scene_id`   | string | 否  | 按场景筛选，如 `labor` |
+| `keyword`    | string | 否  | 按标题模糊搜索         |
 
 ### 响应状态
 
-| HTTP 状态码 | 说明 |
-|-------------|------|
-| 200 | 成功，返回法规列表和元数据 |
+| HTTP 状态码 | 说明            |
+|----------|---------------|
+| 200      | 成功，返回法规列表和元数据 |
 
 ### 请求示例
 
@@ -310,19 +312,19 @@ curl "http://localhost:5000/api/laws?country_id=ZA&page=1&per_page=5"
 
 ### 请求参数（Query）
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `page` | int | 否 | 页码，默认 1 |
-| `per_page` | int | 否 | 每页条数，默认 20 |
-| `scene_id` | string | 否 | 按服务场景筛选，如 `law-labor` |
-| `category_id` | string | 否 | 按机构大类筛选，如 `law`、`accounting` |
-| `keyword` | string | 否 | 按机构名称或覆盖区域模糊搜索 |
+| 字段            | 类型     | 必填 | 说明                           |
+|---------------|--------|----|------------------------------|
+| `page`        | int    | 否  | 页码，默认 1                      |
+| `per_page`    | int    | 否  | 每页条数，默认 20                   |
+| `scene_id`    | string | 否  | 按服务场景筛选，如 `law-labor`        |
+| `category_id` | string | 否  | 按机构大类筛选，如 `law`、`accounting` |
+| `keyword`     | string | 否  | 按机构名称或覆盖区域模糊搜索               |
 
 ### 响应状态
 
-| HTTP 状态码 | 说明 |
-|-------------|------|
-| 200 | 成功，返回机构列表和元数据 |
+| HTTP 状态码 | 说明            |
+|----------|---------------|
+| 200      | 成功，返回机构列表和元数据 |
 
 ### 请求示例
 
@@ -378,19 +380,19 @@ curl "http://localhost:5000/api/agencies?scene_id=law-labor&page=1&per_page=5"
 
 ### 请求参数（Query）
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `page` | int | 否 | 页码，默认 1 |
-| `per_page` | int | 否 | 每页条数，默认 20 |
-| `type` | string | 否 | 按类型筛选：`cooperation` / `hotspot` / `update` |
-| `country_id` | string | 否 | 按国家筛选 |
-| `keyword` | string | 否 | 按标题模糊搜索 |
+| 字段           | 类型     | 必填 | 说明                                         |
+|--------------|--------|----|--------------------------------------------|
+| `page`       | int    | 否  | 页码，默认 1                                    |
+| `per_page`   | int    | 否  | 每页条数，默认 20                                 |
+| `type`       | string | 否  | 按类型筛选：`cooperation` / `hotspot` / `update` |
+| `country_id` | string | 否  | 按国家筛选                                      |
+| `keyword`    | string | 否  | 按标题模糊搜索                                    |
 
 ### 响应状态
 
-| HTTP 状态码 | 说明 |
-|-------------|------|
-| 200 | 成功，返回资讯列表和元数据 |
+| HTTP 状态码 | 说明            |
+|----------|---------------|
+| 200      | 成功，返回资讯列表和元数据 |
 
 ### 请求示例
 
@@ -454,9 +456,9 @@ curl "http://localhost:5000/api/news?type=hotspot&page=1&per_page=5"
 
 ### 响应状态
 
-| HTTP 状态码 | 说明 |
-|-------------|------|
-| 200 | 成功，返回统计数值 |
+| HTTP 状态码 | 说明        |
+|----------|-----------|
+| 200      | 成功，返回统计数值 |
 
 ### 请求示例
 
@@ -495,11 +497,11 @@ curl http://localhost:5000/api/stats
 
 **GET** `/api/admin/{resource}?page=1&per_page=20&status=draft`
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `page` | int | 否 | 页码，默认 1 |
-| `per_page` | int | 否 | 每页条数，默认 20 |
-| `status` | string | 否 | `draft` 待审核 / `published` 已发布 / 不传返回全部 |
+| 参数         | 类型     | 必填 | 说明                                     |
+|------------|--------|----|----------------------------------------|
+| `page`     | int    | 否  | 页码，默认 1                                |
+| `per_page` | int    | 否  | 每页条数，默认 20                             |
+| `status`   | string | 否  | `draft` 待审核 / `published` 已发布 / 不传返回全部 |
 
 ```bash
 # 待审核列表
@@ -512,6 +514,7 @@ curl -H 'Authorization: Bearer {token}' \
 ```
 
 **响应：**
+
 ```json
 {
     "success": true,
@@ -553,6 +556,7 @@ curl -X POST http://localhost:5000/api/admin/news \
 ```
 
 **admin 创建响应（201）：**
+
 ```json
 {
     "success": true,
@@ -564,6 +568,7 @@ curl -X POST http://localhost:5000/api/admin/news \
 ```
 
 **editor 创建响应（201）：**
+
 ```json
 {
     "success": true,
@@ -586,6 +591,7 @@ curl -H 'Authorization: Bearer {token}' \
 ```
 
 **响应：**
+
 ```json
 {
     "success": true,
@@ -610,6 +616,7 @@ curl -X PUT http://localhost:5000/api/admin/laws/1 \
 ```
 
 **响应：**
+
 ```json
 {
     "success": true,
@@ -632,11 +639,13 @@ curl -X DELETE http://localhost:5000/api/admin/laws/1 \
 ```
 
 **响应：**
+
 ```json
 { "success": true, "data": null, "message": "删除成功" }
 ```
 
 **editor 调用（403）：**
+
 ```json
 { "success": false, "error": { "code": "AUTH_ERROR", "message": "权限不足" } }
 ```
@@ -653,6 +662,7 @@ curl -X POST http://localhost:5000/api/admin/news/10/approve \
 ```
 
 **响应：**
+
 ```json
 {
     "success": true,
@@ -675,6 +685,7 @@ curl -H 'Authorization: Bearer {admin_token}' \
 ```
 
 **响应：**
+
 ```json
 {
     "success": true,
@@ -702,6 +713,7 @@ curl -X PUT http://localhost:5000/api/admin/users/2 \
 ```
 
 **响应：**
+
 ```json
 {
     "success": true,
@@ -711,17 +723,18 @@ curl -X PUT http://localhost:5000/api/admin/users/2 \
 ```
 
 **修改管理员（403）：**
+
 ```json
 { "success": false, "error": { "code": "AUTH_ERROR", "message": "不能修改管理员权限" } }
 ```
 
 ### 响应状态汇总
 
-| HTTP 状态码 | 错误码 | 说明 |
-|-------------|--------|------|
-| 201 | - | 创建成功 |
-| 200 | - | 操作成功 |
-| 400 | `VALIDATION_ERROR` | 参数不合法 |
-| 401 | `AUTH_ERROR` | 未登录或 token 无效 |
-| 403 | `AUTH_ERROR` | 权限不足 |
-| 404 | `NOT_FOUND` | 记录不存在 |
+| HTTP 状态码 | 错误码                | 说明            |
+|----------|--------------------|---------------|
+| 201      | -                  | 创建成功          |
+| 200      | -                  | 操作成功          |
+| 400      | `VALIDATION_ERROR` | 参数不合法         |
+| 401      | `AUTH_ERROR`       | 未登录或 token 无效 |
+| 403      | `AUTH_ERROR`       | 权限不足          |
+| 404      | `NOT_FOUND`        | 记录不存在         |
