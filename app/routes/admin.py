@@ -119,6 +119,18 @@ def approve_agency(item_id):
     return jsonify({'success': True, 'data': result, 'message': '审核通过'}), 200
 
 
+@admin_bp.route('/agencies/approve-batch', methods=['POST'])
+@jwt_required(role='admin')
+def batch_approve_agency():
+    data = request.get_json(silent=True) or {}
+    ids = data.get('ids', [])
+    if not ids:
+        raise AppError('VALIDATION_ERROR', 'ids 不能为空', 400)
+    model, draft_model, fk_field = CONTENT_MODELS['agencies']
+    result = admin_service.batch_approve_items(model, draft_model, ids, fk_field)
+    return jsonify({'success': True, 'data': result, 'message': '批量审核完成'}), 200
+
+
 @admin_bp.route('/agencies/<int:item_id>/suspend', methods=['POST'])
 @jwt_required(role='admin')
 def suspend_agency(item_id):
@@ -213,6 +225,17 @@ def delete_news(item_id):
 def approve_news(item_id):
     result = admin_service.approve_item(News, NewsDraft, item_id, 'news_id')
     return jsonify({'success': True, 'data': result, 'message': '审核通过'}), 200
+
+
+@admin_bp.route('/news/approve-batch', methods=['POST'])
+@jwt_required(role='admin')
+def batch_approve_news():
+    data = request.get_json(silent=True) or {}
+    ids = data.get('ids', [])
+    if not ids:
+        raise AppError('VALIDATION_ERROR', 'ids 不能为空', 400)
+    result = admin_service.batch_approve_items(News, NewsDraft, ids, 'news_id')
+    return jsonify({'success': True, 'data': result, 'message': '批量审核完成'}), 200
 
 
 @admin_bp.route('/news/<int:item_id>/suspend', methods=['POST'])
@@ -326,6 +349,34 @@ def approve_law(item_id):
     if old_secure and old_secure != new_secure:
         _remove_file(old_secure)
     return jsonify({'success': True, 'data': result, 'message': '审核通过'}), 200
+
+
+@admin_bp.route('/laws/approve-batch', methods=['POST'])
+@jwt_required(role='admin')
+def batch_approve_law():
+    data = request.get_json(silent=True) or {}
+    ids = data.get('ids', [])
+    if not ids:
+        raise AppError('VALIDATION_ERROR', 'ids 不能为空', 400)
+
+    # snapshot old secure names before transaction
+    old_secure_map = {}
+    for lid in ids:
+        law = Law.query.get(lid)
+        if law:
+            old_secure_map[lid] = law.secure_name
+
+    result = admin_service.batch_approve_items(Law, LawDraft, ids, 'law_id')
+
+    # cleanup old files after successful commit
+    for lid in ids:
+        old = old_secure_map.get(lid)
+        new_law = Law.query.get(lid)
+        new = new_law.secure_name if new_law else None
+        if old and old != new:
+            _remove_file(old)
+
+    return jsonify({'success': True, 'data': result, 'message': '批量审核完成'}), 200
 
 
 @admin_bp.route('/laws/<int:item_id>/suspend', methods=['POST'])

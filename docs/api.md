@@ -756,6 +756,31 @@ curl -X POST http://localhost:6768/api/admin/agencies/70/approve \
 
 ---
 
+### 批量审核（仅 admin）
+
+**POST** `/api/admin/agencies/approve-batch`
+
+单事务，全部成功或全部 rollback。
+
+```bash
+curl -X POST http://localhost:6768/api/admin/agencies/approve-batch \
+  -H 'Authorization: Bearer {admin_token}' \
+  -H 'Content-Type: application/json' \
+  -d '{"ids": [1, 3, 7]}'
+```
+
+**响应：**
+
+```json
+{
+    "success": true,
+    "data": {"approved": [1, 3, 7]},
+    "message": "批量审核完成"
+}
+```
+
+---
+
 ### 挂起（仅 admin）
 
 **POST** `/api/admin/agencies/{id}/suspend`
@@ -1154,7 +1179,32 @@ curl -X POST http://localhost:6768/api/admin/news/13/approve \
 
 ---
 
-### 11.7 挂起（仅 admin）
+### 11.7 批量审核（仅 admin）
+
+**POST** `/api/admin/news/approve-batch`
+
+单事务，全部成功或全部 rollback。
+
+```bash
+curl -X POST http://localhost:6768/api/admin/news/approve-batch \
+  -H 'Authorization: Bearer {admin_token}' \
+  -H 'Content-Type: application/json' \
+  -d '{"ids": [1, 3, 7]}'
+```
+
+**响应：**
+
+```json
+{
+    "success": true,
+    "data": {"approved": [1, 3, 7]},
+    "message": "批量审核完成"
+}
+```
+
+---
+
+### 11.8 挂起（仅 admin）
 
 **POST** `/api/admin/news/{id}/suspend`
 
@@ -1474,7 +1524,32 @@ curl -X POST http://localhost:6768/api/admin/laws/13/approve \
 
 ---
 
-### 12.7 挂起（仅 admin）
+### 12.7 批量审核（仅 admin）
+
+**POST** `/api/admin/laws/approve-batch`
+
+单事务，全部成功或全部 rollback。事务提交后统一清理旧文件。
+
+```bash
+curl -X POST http://localhost:6768/api/admin/laws/approve-batch \
+  -H 'Authorization: Bearer {admin_token}' \
+  -H 'Content-Type: application/json' \
+  -d '{"ids": [1, 3, 7]}'
+```
+
+**响应：**
+
+```json
+{
+    "success": true,
+    "data": {"approved": [1, 3, 7]},
+    "message": "批量审核完成"
+}
+```
+
+---
+
+### 12.8 挂起（仅 admin）
 
 **POST** `/api/admin/laws/{id}/suspend`
 

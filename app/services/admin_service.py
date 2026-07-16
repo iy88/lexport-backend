@@ -121,6 +121,34 @@ def suspend_item(model, DraftModel, item_id, fk_field):
     return {'item': _admin_to_dict(item)}
 
 
+def batch_approve_items(model, DraftModel, ids, fk_field):
+    """Approve multiple items in a single transaction."""
+    approved = []
+    old_secure_map = {}  # for laws: track old secure_name
+
+    for item_id in ids:
+        item = db.session.get(model, item_id)
+        if not item:
+            raise NotFoundError(f'记录不存在: {item_id}')
+
+        # track old file for laws
+        if hasattr(item, 'secure_name'):
+            old_secure_map[item_id] = item.secure_name
+
+        draft = DraftModel.query.filter_by(**{fk_field: item_id}).first()
+        if draft and draft.data:
+            for key, value in draft.data.items():
+                if hasattr(item, key):
+                    setattr(item, key, value)
+            db.session.delete(draft)
+
+        item.status = 'published'
+        approved.append(item_id)
+
+    db.session.commit()
+    return {'approved': approved, 'old_secure_map': old_secure_map}
+
+
 def update_item_with_draft(model, DraftModel, item_id, data, user, fk_field):
     """Update with draft support:
     - admin: direct update

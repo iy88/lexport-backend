@@ -13,3 +13,4 @@ htmlcov/
 .claude
 CLAUDE.md
 *.sql
+uploads
