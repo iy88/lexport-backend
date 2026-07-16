@@ -1,14 +1,21 @@
+from app.models.content import NewsText
 from app.models.country import Country
 from app.models.news import News, NewsTag, NewsTagRelation
+from app.utils.errors import NotFoundError
 
 
-def get_news(page=1, per_page=20, type=None, country_id=None, keyword=None):
+def get_news(page=1, per_page=20, type=None, country_id=None, keyword=None,
+             date_from=None, date_to=None):
     query = News.query.filter(News.status == 'published')
 
     if type:
         query = query.filter(News.type == type)
     if country_id:
         query = query.filter(News.country_id == country_id)
+    if date_from:
+        query = query.filter(News.date >= date_from)
+    if date_to:
+        query = query.filter(News.date <= date_to)
     if keyword:
         query = query.filter(News.title.contains(keyword))
 
@@ -70,4 +77,25 @@ def _to_dict(n, tags):
         'advice': n.advice,
         'tags': tags,
         'created_at': n.created_at.isoformat() if n.created_at else None,
+    }
+
+
+def get_news_detail(news_id):
+    item = News.query.get(news_id)
+    if not item:
+        raise NotFoundError('资讯不存在')
+
+    # get tags
+    relations = NewsTagRelation.query.filter_by(news_id=news_id).all()
+    tag_ids = [r.tag_id for r in relations]
+    tags = NewsTag.query.filter(NewsTag.id.in_(tag_ids)).all() if tag_ids else []
+    tag_list = [{'id': t.id, 'name_zh': t.name_zh} for t in tags]
+
+    # get content
+    text = NewsText.query.get(news_id)
+    content = text.content if text else None
+
+    return {
+        **_to_dict(item, tag_list),
+        'content': content,
     }

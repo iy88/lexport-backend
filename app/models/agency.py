@@ -33,3 +33,10 @@ class Agency(db.Model):
     highlight = db.Column(db.String(50))
     status = db.Column(db.Enum('draft', 'published', name='content_status_enum'), default='published', nullable=False)
     sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        server_default=db.func.current_timestamp(),
+        onupdate=db.func.current_timestamp(),
+        nullable=False,
+    )

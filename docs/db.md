@@ -38,7 +38,6 @@
 |--------------|-------------|-----------|--------------------------|
 | `id`         | VARCHAR(20) | PK        | 场景代码，如 `customs`、`labor` |
 | `label_zh`   | VARCHAR(30) | NOT NULL  | 中文名，如「海关进出口」             |
-| `icon_name`  | VARCHAR(30) |           | Lucide 图标名               |
 | `sort_order` | INT         | DEFAULT 0 | 排序                       |
 
 ### laws
@@ -46,15 +45,29 @@
 | 字段               | 类型           | 约束                                  | 说明      |
 |------------------|--------------|-------------------------------------|---------|
 | `id`             | BIGINT       | PK, AUTO_INCREMENT                  | 主键      |
-| `title`          | VARCHAR(300) | NOT NULL                            | 法规标题    |
+| `title_cn`       | VARCHAR(300) | NOT NULL                            | 中文标题    |
+| `title_en`       | VARCHAR(300) |                                     | 英文标题    |
+| `law_number`     | VARCHAR(100) |                                     | 法号/法令编号 |
 | `country_id`     | VARCHAR(10)  | FK → countries.id, NOT NULL         | 所属国家    |
 | `scene_id`       | VARCHAR(20)  | FK → compliance_scenes.id, NOT NULL | 适用场景    |
-| `level`          | VARCHAR(30)  |                                     | 效力层级    |
-| `penalty`        | TEXT         |                                     | 处罚条款描述  |
 | `effective_date` | DATE         |                                     | 生效/修订日期 |
 | `summary`        | TEXT         |                                     | 法规要点摘要  |
-| `full_text_url`  | VARCHAR(500) |                                     | 法规原文链接  |
+| `filename`       | VARCHAR(500) |                                     | 原始文件名  |
+| `secure_name`    | VARCHAR(500) |                                     | 存储文件名（UUID.ext） |
+| `status`         | ENUM('draft','published') | NOT NULL, DEFAULT 'published'       | 发布状态    |
 | `created_at`     | DATETIME     | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间    |
+| `updated_at`     | DATETIME     | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间    |
+
+### laws_drafts
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | BIGINT | PK, AUTO_INCREMENT | 主键 |
+| `law_id` | BIGINT | UNIQUE, FK → laws.id ON DELETE CASCADE | 关联法规 |
+| `data` | JSON | NOT NULL | 完整行数据（待审批） |
+| `editor_id` | BIGINT | FK → users.id | 编辑者 |
+| `created_at` | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| `updated_at` | DATETIME | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
 
 ### company_sizes
 
@@ -123,7 +136,20 @@
 | `change_desc`   | TEXT                                   |                                     | 核心更新内容 |
 | `impact`        | TEXT                                   |                                     | 对企业影响  |
 | `advice`        | TEXT                                   |                                     | 合规建议   |
+| `status`        | ENUM('draft','published')              | NOT NULL, DEFAULT 'published'        | 发布状态   |
 | `created_at`    | DATETIME                               | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间   |
+| `updated_at`    | DATETIME                               | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间   |
+
+### news_drafts
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | BIGINT | PK, AUTO_INCREMENT | 主键 |
+| `news_id` | BIGINT | UNIQUE, FK → news.id ON DELETE CASCADE | 关联资讯 |
+| `data` | JSON | NOT NULL | 完整行数据（待审批） |
+| `editor_id` | BIGINT | FK → users.id | 编辑者 |
+| `created_at` | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| `updated_at` | DATETIME | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
 
 ### news_tags
 
@@ -175,6 +201,20 @@
 | `advantage`  | TEXT         |                                 | 核心优势描述 |
 | `highlight`  | VARCHAR(50)  |                                 | 亮点标签   |
 | `sort_order` | INT          | DEFAULT 0                       | 排序     |
+| `status`     | ENUM('draft','published') | NOT NULL, DEFAULT 'published'       | 发布状态   |
+| `created_at` | DATETIME     | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间   |
+| `updated_at` | DATETIME     | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间   |
+
+### agencies_drafts
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | BIGINT | PK, AUTO_INCREMENT | 主键 |
+| `agency_id` | BIGINT | UNIQUE, FK → agencies.id ON DELETE CASCADE | 关联机构 |
+| `data` | JSON | NOT NULL | 完整行数据（待审批） |
+| `editor_id` | BIGINT | FK → users.id | 编辑者 |
+| `created_at` | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| `updated_at` | DATETIME | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
 
 ---
 
@@ -194,6 +234,19 @@ UNION ALL SELECT 'agencies', CAST(COUNT(*) AS CHAR), '合作合规机构', 4 FRO
 
 ---
 
+## 6. 正文存储
+
+### news_text
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `news_id` | BIGINT | PK, FK → news.id ON DELETE CASCADE | 关联资讯 |
+| `content` | MEDIUMTEXT | NOT NULL | 正文内容（上限 16MB） |
+| `created_at` | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| `updated_at` | DATETIME | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
+
+---
+
 ## ER 关系概览
 
 ```
@@ -202,8 +255,12 @@ users ──< diagnosis_records >── diagnosis_record_scenes ──< complian
                   └── diagnosis_record_laws ──< laws
                   │
 countries ──< laws
+laws ── laws_drafts >── users
 countries ──< news
 news >── news_tag_relations ──< news_tags
+news ── news_text
+news ── news_drafts >── users
 
 agency_categories ──< agency_scenes ──< agencies
+agencies ── agencies_drafts >── users
 ```

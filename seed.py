@@ -4,11 +4,12 @@ import os
 from app import create_app
 from app.extensions import db
 from app.models import (
-    Country, ComplianceScene, Law,
+    Country,
     CompanySize, BudgetRange,
     AgencyCategory, AgencyScene, Agency,
     News, NewsTag, NewsTagRelation,
 )
+from app.models.draft import NewsDraft, AgencyDraft
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'lexport-frontend', 'docs', 'data.json')
 
@@ -24,11 +25,11 @@ def seed():
         NewsTagRelation.query.delete()
         News.query.delete()
         NewsTag.query.delete()
-        Law.query.delete()
+        NewsDraft.query.delete()
+        AgencyDraft.query.delete()
         Agency.query.delete()
         AgencyScene.query.delete()
         AgencyCategory.query.delete()
-        ComplianceScene.query.delete()
         Country.query.delete()
         CompanySize.query.delete()
         BudgetRange.query.delete()
@@ -41,18 +42,6 @@ def seed():
             db.session.add(Country(**item))
         db.session.commit()
         print(f'countries: {len(data["countries"])} rows')
-
-        # compliance_scenes
-        for item in data['compliance_scenes']:
-            db.session.add(ComplianceScene(**item))
-        db.session.commit()
-        print(f'compliance_scenes: {len(data["compliance_scenes"])} rows')
-
-        # laws
-        for item in data['laws']:
-            db.session.add(Law(**item))
-        db.session.commit()
-        print(f'laws: {len(data["laws"])} rows')
 
         # company_sizes
         for item in data['company_sizes']:
@@ -101,7 +90,7 @@ def seed():
                 continue
             news = News(**item)
             db.session.add(news)
-            db.session.commit()  # commit to get news.id
+            db.session.commit()
             for tid in tag_ids:
                 db.session.add(NewsTagRelation(news_id=news.id, tag_id=tid))
             db.session.commit()

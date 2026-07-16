@@ -1,3 +1,5 @@
+from sqlalchemy import or_
+
 from app.models.country import Country
 from app.models.law import Law, ComplianceScene
 
@@ -10,7 +12,10 @@ def get_laws(page=1, per_page=20, country_id=None, scene_id=None, keyword=None):
     if scene_id:
         query = query.filter(Law.scene_id == scene_id)
     if keyword:
-        query = query.filter(Law.title.contains(keyword))
+        query = query.filter(or_(
+            Law.title_cn.contains(keyword),
+            Law.title_en.contains(keyword),
+        ))
 
     total = query.count()
 
@@ -40,13 +45,14 @@ def get_laws(page=1, per_page=20, country_id=None, scene_id=None, keyword=None):
 def _law_to_dict(law):
     return {
         'id': law.id,
-        'title': law.title,
+        'title_cn': law.title_cn,
+        'title_en': law.title_en,
+        'law_number': law.law_number,
         'country_id': law.country_id,
         'scene_id': law.scene_id,
-        'level': law.level,
-        'penalty': law.penalty,
         'effective_date': law.effective_date.isoformat() if law.effective_date else None,
         'summary': law.summary,
-        'full_text_url': law.full_text_url,
+        'filename': law.filename,
+        'secure_name': law.secure_name,
         'created_at': law.created_at.isoformat() if law.created_at else None,
     }

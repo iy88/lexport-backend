@@ -91,5 +91,5 @@ JWT payload 中包含 `type` 字段，防止 token 类型混淆。
 
 ## 数据库设计
 
-> 备份: `mysqldump --set-gtid-purged=OFF -u root -p lexport > initial.sql`
+> 备份: `mysqldump --set-gtid-purged=OFF -u root -p lexport > bkup.sql`
 > 详见 [docs/db.md](docs/db.md)。
