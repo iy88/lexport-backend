@@ -31,7 +31,7 @@ class BaseConfig:
 
     FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://lexport.cn')
 
-    UPLOAD_PATH = os.environ.get('UPLOAD_PATH', './uploads')
+    UPLOAD_PATH = os.path.abspath(os.environ.get('UPLOAD_PATH', './uploads'))
 
 
 class DevelopmentConfig(BaseConfig):

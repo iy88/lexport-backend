@@ -30,6 +30,7 @@ REF_MODELS = {
     'agency-scenes': AgencyScene,
     'budget-ranges': BudgetRange,
     'company-sizes': CompanySize,
+    'news-tags': NewsTag,
 }
 
 EDITOR_RESTRICTED = {'budget-ranges', 'company-sizes'}

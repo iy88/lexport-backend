@@ -2,6 +2,7 @@ from sqlalchemy import or_
 
 from app.models.country import Country
 from app.models.law import Law, ComplianceScene
+from app.utils.errors import NotFoundError
 
 
 def get_laws(page=1, per_page=20, country_id=None, scene_id=None, keyword=None):
@@ -52,7 +53,13 @@ def _law_to_dict(law):
         'scene_id': law.scene_id,
         'effective_date': law.effective_date.isoformat() if law.effective_date else None,
         'summary': law.summary,
-        'filename': law.filename,
-        'secure_name': law.secure_name,
+        'has_file': bool(law.secure_name),
         'created_at': law.created_at.isoformat() if law.created_at else None,
     }
+
+
+def get_law_detail(law_id):
+    law = Law.query.filter_by(id=law_id, status='published').first()
+    if not law:
+        raise NotFoundError('法规不存在')
+    return _law_to_dict(law)

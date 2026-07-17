@@ -284,8 +284,6 @@ curl "http://localhost:5000/api/laws?country_id=ZA&page=1&per_page=5"
                 "scene_id": "customs",
                 "effective_date": "2024-01-15",
                 "summary": "制造业进口原材料需提前30天备案...",
-                "filename": null,
-                "secure_name": null,
                 "created_at": "2026-05-17T12:00:00"
             }
         ],
@@ -304,6 +302,23 @@ curl "http://localhost:5000/api/laws?country_id=ZA&page=1&per_page=5"
     "message": "成功"
 }
 ```
+
+---
+
+### 法规文件下载
+
+**GET** `/api/laws/{id}/download`
+
+仅返回已发布法规的文件。以原始文件名作为下载名。
+
+```bash
+curl -O -J http://localhost:6768/api/laws/1/download
+```
+
+| HTTP 状态码 | 错误码         | 说明        |
+|----------|-------------|-----------|
+| 200      | -           | 文件下载      |
+| 404      | `NOT_FOUND` | 法规或文件不存在 |
 
 ---
 
@@ -820,6 +835,7 @@ curl -X POST http://localhost:6768/api/admin/agencies/6/suspend \
 | `agency_scenes` | `agency-scenes` | CRUD | CRUD |
 | `budget_ranges` | `budget-ranges` | CRUD | — |
 | `company_sizes` | `company-sizes` | CRUD | — |
+| `news_tags` | `news-tags` | CRUD | CRUD |
 
 ### 列表
 

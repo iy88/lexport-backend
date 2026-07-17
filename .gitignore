@@ -13,4 +13,4 @@ htmlcov/
 .claude
 CLAUDE.md
 *.sql
-uploads
+uploads.DS_Store
