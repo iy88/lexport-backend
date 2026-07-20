@@ -1298,7 +1298,7 @@ curl -H 'Authorization: Bearer {token}' \
                 "effective_date": null,
                 "summary": null,
                 "filename": "南非海关法.pdf",
-                "secure_name": "a1b2c3d4-e5f6-7890-abcd-ef1234567890.pdf",
+                "has_file": true,
                 "status": "draft",
                 "created_at": "2026-05-17T12:00:00",
                 "updated_at": "2026-05-17T12:00:00"
@@ -1343,7 +1343,7 @@ curl -H 'Authorization: Bearer {token}' \
             "effective_date": "2024-01-15",
             "summary": "制造业进口原材料需提前30天备案...",
             "filename": "南非海关法.pdf",
-            "secure_name": "a1b2c3d4-e5f6-7890-abcd-ef1234567890.pdf"
+            "has_file": true,
             "status": "published",
             "created_at": "2026-05-17T12:00:00",
             "updated_at": "2026-05-17T12:00:00"
@@ -1408,7 +1408,7 @@ curl -X POST http://localhost:6768/api/admin/laws \
             "effective_date": "2024-01-15",
             "summary": "制造业进口原材料需提前30天备案",
             "filename": "南非海关法.pdf",
-            "secure_name": "a1b2c3d4-e5f6-7890-abcd-ef1234567890.pdf"
+            "has_file": true,
             "status": "published",
             "created_at": "2026-05-17T12:00:00",
             "updated_at": "2026-05-17T12:00:00"
@@ -1469,7 +1469,7 @@ curl -X PUT http://localhost:6768/api/admin/laws/1 \
             "id": 1,
             "title_cn": "修改后的标题",
             "filename": "新法规文件.pdf",
-            "secure_name": "b2c3d4e5-f6a7-8901-bcde-f12345678901.pdf",
+            "has_file": true,
             "status": "published",
             "updated_at": "2026-07-15T10:30:00"
         }

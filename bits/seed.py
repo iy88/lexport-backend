@@ -11,7 +11,7 @@ from app.models import (
 )
 from app.models.draft import NewsDraft, AgencyDraft
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'lexport-frontend', 'docs', 'data.json')
+DATA_PATH = os.path.join(os.path.dirname(__file__), '../..', 'lexport-frontend', 'docs', 'data.json')
 
 app = create_app(os.environ.get('FLASK_ENV', 'development'))
 

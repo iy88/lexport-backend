@@ -11,6 +11,6 @@ instance/
 htmlcov/
 .idea
 .claude
-CLAUDE.md
 *.sql
-uploads.DS_Store
+uploads
+.DS_Store

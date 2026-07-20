@@ -177,7 +177,7 @@ def update_item_with_draft(model, DraftModel, item_id, data, user, fk_field):
             db.session.commit()
         else:
             # published record: save to draft table
-            full_data = _admin_to_dict(item)
+            full_data = _admin_to_dict_full(item)
             full_data.pop('created_at', None)
             full_data.pop('updated_at', None)
             full_data.pop('id', None)
@@ -267,6 +267,21 @@ def delete_ref_item(model, item_id):
 # -- Serializer --
 
 def _admin_to_dict(item):
+    d = {}
+    for col in item.__table__.columns:
+        if col.name == 'secure_name':
+            continue
+        val = getattr(item, col.name)
+        if hasattr(val, 'isoformat'):
+            val = val.isoformat()
+        d[col.name] = val
+    if hasattr(item, 'secure_name'):
+        d['has_file'] = bool(item.secure_name)
+    return d
+
+
+def _admin_to_dict_full(item):
+    """Include secure_name — for internal use (draft data building)."""
     d = {}
     for col in item.__table__.columns:
         val = getattr(item, col.name)
