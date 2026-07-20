@@ -15,7 +15,7 @@ def get_agencies(page=1, per_page=20, scene_id=None, category_id=None, keyword=N
         query = query.filter(Agency.region.contains(region))
     if keyword:
         query = query.filter(
-            db.or_(Agency.name_zh.contains(keyword), Agency.region.contains(keyword))
+            db.or_(Agency.name.contains(keyword), Agency.region.contains(keyword))
         )
 
     total = query.count()
@@ -56,7 +56,7 @@ def get_agencies(page=1, per_page=20, scene_id=None, category_id=None, keyword=N
 def _to_dict(a):
     return {
         'id': a.id,
-        'name_zh': a.name_zh,
+        'name': a.name,
         'scene_id': a.scene_id,
         'region': a.region,
         'phone': a.phone,

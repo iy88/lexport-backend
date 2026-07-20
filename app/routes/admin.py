@@ -5,8 +5,6 @@ from flask import Blueprint, current_app, request, jsonify, g
 
 from app.extensions import db
 from app.models.agency import Agency, AgencyCategory, AgencyScene
-from app.models.budget_range import BudgetRange
-from app.models.company_size import CompanySize
 from app.models.content import NewsText
 from app.models.country import Country
 from app.models.draft import LawDraft, NewsDraft, AgencyDraft
@@ -28,12 +26,10 @@ REF_MODELS = {
     'compliance-scenes': ComplianceScene,
     'agency-categories': AgencyCategory,
     'agency-scenes': AgencyScene,
-    'budget-ranges': BudgetRange,
-    'company-sizes': CompanySize,
     'news-tags': NewsTag,
 }
 
-EDITOR_RESTRICTED = {'budget-ranges', 'company-sizes'}
+EDITOR_RESTRICTED = set()
 
 
 # -- Helpers --
@@ -42,6 +38,7 @@ def _save_uploaded_file(file):
     ext = os.path.splitext(file.filename)[1]
     filename = str(uuid.uuid4()) + ext
     upload_dir = os.path.join(current_app.config['UPLOAD_PATH'], 'laws')
+    os.makedirs(upload_dir, exist_ok=True)
     file.save(os.path.join(upload_dir, filename))
     return filename
 
@@ -148,10 +145,12 @@ def list_news():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     status = request.args.get('status')
+    tag_id = request.args.get('tag_id', type=int)
     filters = {k: request.args.get(k) for k in [
         'type', 'country_id', 'date_from', 'date_to', 'keyword',
     ] if request.args.get(k)}
-    result = admin_service.list_items(News, 'news', page, per_page, status, filters)
+    result = admin_service.list_items(News, 'news', page, per_page, status, filters,
+                                       tag_id=tag_id)
     return jsonify({'success': True, 'data': result, 'message': '成功'}), 200
 
 

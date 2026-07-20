@@ -15,6 +15,7 @@ def get_news():
     keyword = request.args.get('keyword')
     date_from = request.args.get('date_from')
     date_to = request.args.get('date_to')
+    tag_id = request.args.get('tag_id', type=int)
 
     result = news_service.get_news(
         page=page,
@@ -24,6 +25,7 @@ def get_news():
         keyword=keyword,
         date_from=date_from,
         date_to=date_to,
+        tag_id=tag_id,
     )
     return jsonify({'success': True, 'data': result, 'message': '成功'}), 200
 

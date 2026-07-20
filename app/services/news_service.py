@@ -5,7 +5,7 @@ from app.utils.errors import NotFoundError
 
 
 def get_news(page=1, per_page=20, type=None, country_id=None, keyword=None,
-             date_from=None, date_to=None):
+             date_from=None, date_to=None, tag_id=None):
     query = News.query.filter(News.status == 'published')
 
     if type:
@@ -18,6 +18,18 @@ def get_news(page=1, per_page=20, type=None, country_id=None, keyword=None,
         query = query.filter(News.date <= date_to)
     if keyword:
         query = query.filter(News.title.contains(keyword))
+    if tag_id:
+        tagged_ids = [r.news_id for r in NewsTagRelation.query.filter_by(tag_id=tag_id).all()]
+        query = query.filter(News.id.in_(tagged_ids))
+
+    # collect tags from all matching results (before pagination)
+    all_matching_ids = [n[0] for n in query.with_entities(News.id).all()]
+    all_tag_ids = set()
+    if all_matching_ids:
+        for r in NewsTagRelation.query.filter(NewsTagRelation.news_id.in_(all_matching_ids)).all():
+            all_tag_ids.add(r.tag_id)
+    meta_tags = [{'id': t.id, 'name_zh': t.name_zh}
+                 for t in NewsTag.query.filter(NewsTag.id.in_(all_tag_ids)).order_by(NewsTag.id).all()] if all_tag_ids else []
 
     total = query.count()
 
@@ -29,18 +41,17 @@ def get_news(page=1, per_page=20, type=None, country_id=None, keyword=None,
         .all()
     )
 
-    # collect tags for returned news
+    # collect tags for current page news
     news_ids = [n.id for n in news_list]
     tag_map = {}
     if news_ids:
         relations = NewsTagRelation.query.filter(NewsTagRelation.news_id.in_(news_ids)).all()
-        tag_ids = {r.tag_id for r in relations}
-        tags = {t.id: t for t in NewsTag.query.filter(NewsTag.id.in_(tag_ids)).all()}
+        page_tag_ids = {r.tag_id for r in relations}
+        tags = {t.id: t for t in NewsTag.query.filter(NewsTag.id.in_(page_tag_ids)).all()}
         for r in relations:
             tag_map.setdefault(r.news_id, []).append({'id': r.tag_id, 'name_zh': tags[r.tag_id].name_zh})
 
     countries = Country.query.order_by(Country.sort_order).all()
-    all_tags = NewsTag.query.order_by(NewsTag.id).all()
 
     return {
         'news': [_to_dict(n, tag_map.get(n.id, [])) for n in news_list],
@@ -54,7 +65,7 @@ def get_news(page=1, per_page=20, type=None, country_id=None, keyword=None,
                 {'value': 'update', 'label_zh': '法规更新'},
             ],
             'countries': [{'id': c.id, 'name_zh': c.name_zh} for c in countries],
-            'tags': [{'id': t.id, 'name_zh': t.name_zh} for t in all_tags],
+            'tags': meta_tags,
         },
     }
 

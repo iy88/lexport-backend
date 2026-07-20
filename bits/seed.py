@@ -5,7 +5,6 @@ from app import create_app
 from app.extensions import db
 from app.models import (
     Country,
-    CompanySize, BudgetRange,
     AgencyCategory, AgencyScene, Agency,
     News, NewsTag, NewsTagRelation,
 )
@@ -31,8 +30,6 @@ def seed():
         AgencyScene.query.delete()
         AgencyCategory.query.delete()
         Country.query.delete()
-        CompanySize.query.delete()
-        BudgetRange.query.delete()
         db.session.commit()
 
         # -- Insert in FK dependency order --
@@ -42,18 +39,6 @@ def seed():
             db.session.add(Country(**item))
         db.session.commit()
         print(f'countries: {len(data["countries"])} rows')
-
-        # company_sizes
-        for item in data['company_sizes']:
-            db.session.add(CompanySize(**item))
-        db.session.commit()
-        print(f'company_sizes: {len(data["company_sizes"])} rows')
-
-        # budget_ranges
-        for item in data['budget_ranges']:
-            db.session.add(BudgetRange(**item))
-        db.session.commit()
-        print(f'budget_ranges: {len(data["budget_ranges"])} rows')
 
         # agency_categories
         for item in data['agency_categories']:

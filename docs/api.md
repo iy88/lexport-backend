@@ -292,7 +292,7 @@ curl "http://localhost:5000/api/laws?country_id=ZA&page=1&per_page=5"
             "per_page": 5,
             "total": 12,
             "countries": [
-                {"id": "ZA", "name_zh": "南非"}
+                {"id": "ZA", "name": "南非"}
             ],
             "scenes": [
                 {"id": "customs", "label_zh": "海关进出口"}
@@ -358,7 +358,7 @@ curl "http://localhost:5000/api/agencies?scene_id=law-labor&page=1&per_page=5"
         "agencies": [
             {
                 "id": 6,
-                "name_zh": "Webber Wentzel",
+                "name": "Webber Wentzel",
                 "scene_id": "law-labor",
                 "region": "南非",
                 "phone": "+27 10 800 3000",
@@ -403,9 +403,12 @@ curl "http://localhost:5000/api/agencies?scene_id=law-labor&page=1&per_page=5"
 | `per_page`   | int    | 否  | 每页条数，默认 20                                 |
 | `type`       | string | 否  | 按类型筛选：`cooperation` / `hotspot` / `update` |
 | `country_id` | string | 否  | 按国家筛选                                      |
+| `tag_id`     | int    | 否  | 按标签筛选                                      |
 | `date_from`  | string | 否  | 发布日期起始 (YYYY-MM-DD)                       |
 | `date_to`    | string | 否  | 发布日期截止 (YYYY-MM-DD)                       |
 | `keyword`    | string | 否  | 按标题模糊搜索                                    |
+
+> `meta.tags` 为当前筛选条件下所有匹配结果的标签集合。
 
 ### 响应状态
 
@@ -442,8 +445,8 @@ curl "http://localhost:5000/api/news?type=hotspot&page=1&per_page=5"
                 "impact": null,
                 "advice": null,
                 "tags": [
-                    {"id": 7, "name_zh": "数据安全"},
-                    {"id": 8, "name_zh": "行政处罚"}
+                    {"id": 7, "name": "数据安全"},
+                    {"id": 8, "name": "行政处罚"}
                 ],
                 "created_at": "2026-05-17T12:00:00"
             }
@@ -457,8 +460,8 @@ curl "http://localhost:5000/api/news?type=hotspot&page=1&per_page=5"
                 {"value": "hotspot", "label_zh": "合规热点"},
                 {"value": "update", "label_zh": "法规更新"}
             ],
-            "countries": [{"id": "ZA", "name_zh": "南非"}],
-            "tags": [{"id": 7, "name_zh": "数据安全"}]
+            "countries": [{"id": "ZA", "name": "南非"}],
+            "tags": [{"id": 7, "name": "数据安全"}]
         }
     },
     "message": "成功"
@@ -501,8 +504,8 @@ curl http://localhost:6768/api/news/4
         "advice": null,
         "content": "南非信息监管机构（Information Regulator）于 2026 年 4 月对多家未履行数据跨境传输评估义务的企业...",
         "tags": [
-            {"id": 7, "name_zh": "数据安全"},
-            {"id": 8, "name_zh": "行政处罚"}
+            {"id": 7, "name": "数据安全"},
+            {"id": 8, "name": "行政处罚"}
         ],
         "created_at": "2026-05-17T12:00:00"
     },
@@ -620,7 +623,7 @@ curl -H 'Authorization: Bearer {token}' \
         "items": [
             {
                 "id": 6,
-                "name_zh": "Webber Wentzel",
+                "name": "Webber Wentzel",
                 "status": "published",
                 "created_at": "2026-05-17T12:00:00",
                 "updated_at": "2026-05-17T12:00:00"
@@ -645,13 +648,13 @@ Content-Type: `application/json`。Body 为 Agency 字段（无需传 `status`�
 curl -X POST http://localhost:6768/api/admin/agencies \
   -H 'Authorization: Bearer {admin_token}' \
   -H 'Content-Type: application/json' \
-  -d '{"name_zh":"新机构","scene_id":"law-labor","region":"南非"}'
+  -d '{"name":"新机构","scene_id":"law-labor","region":"南非"}'
 
 # editor 创建（自动 draft）
 curl -X POST http://localhost:6768/api/admin/agencies \
   -H 'Authorization: Bearer {editor_token}' \
   -H 'Content-Type: application/json' \
-  -d '{"name_zh":"新机构","scene_id":"law-labor"}'
+  -d '{"name":"新机构","scene_id":"law-labor"}'
 ```
 
 **admin 创建响应（201）：**
@@ -660,7 +663,7 @@ curl -X POST http://localhost:6768/api/admin/agencies \
 {
     "success": true,
     "data": {
-        "item": { "id": 69, "name_zh": "新机构", "scene_id": "law-labor", "status": "published", "created_at": "2026-05-17T12:00:00", "updated_at": "2026-05-17T12:00:00" }
+        "item": { "id": 69, "name": "新机构", "scene_id": "law-labor", "status": "published", "created_at": "2026-05-17T12:00:00", "updated_at": "2026-05-17T12:00:00" }
     },
     "message": "创建成功"
 }
@@ -683,7 +686,7 @@ curl -H 'Authorization: Bearer {token}' \
 {
     "success": true,
     "data": {
-        "item": { "id": 6, "name_zh": "Webber Wentzel", "status": "published", "created_at": "2026-05-17T12:00:00", "updated_at": "2026-05-17T12:00:00" }
+        "item": { "id": 6, "name": "Webber Wentzel", "status": "published", "created_at": "2026-05-17T12:00:00", "updated_at": "2026-05-17T12:00:00" }
     },
     "message": "成功"
 }
@@ -701,7 +704,7 @@ Content-Type: `application/json`。
 curl -X PUT http://localhost:6768/api/admin/agencies/6 \
   -H 'Authorization: Bearer {admin_token}' \
   -H 'Content-Type: application/json' \
-  -d '{"name_zh":"修改后的名称"}'
+  -d '{"name":"修改后的名称"}'
 ```
 
 **响应：**
@@ -710,7 +713,7 @@ curl -X PUT http://localhost:6768/api/admin/agencies/6 \
 {
     "success": true,
     "data": {
-        "item": { "id": 6, "name_zh": "修改后的名称", "status": "published" }
+        "item": { "id": 6, "name": "修改后的名称", "status": "published" }
     },
     "message": "更新成功"
 }
@@ -833,8 +836,6 @@ curl -X POST http://localhost:6768/api/admin/agencies/6/suspend \
 | `compliance_scenes` | `compliance-scenes` | CRUD | CRUD |
 | `agency_categories` | `agency-categories` | CRUD | CRUD |
 | `agency_scenes` | `agency-scenes` | CRUD | CRUD |
-| `budget_ranges` | `budget-ranges` | CRUD | — |
-| `company_sizes` | `company-sizes` | CRUD | — |
 | `news_tags` | `news-tags` | CRUD | CRUD |
 
 ### 列表
@@ -855,8 +856,8 @@ curl -H 'Authorization: Bearer {token}' \
     "success": true,
     "data": {
         "items": [
-            {"id": "ZA", "name_zh": "南非", "name_en": "South Africa", "sort_order": 1},
-            {"id": "NG", "name_zh": "尼日利亚", "name_en": "Nigeria", "sort_order": 3}
+            {"id": "ZA", "name": "南非", "name_en": "South Africa", "sort_order": 1},
+            {"id": "NG", "name": "尼日利亚", "name_en": "Nigeria", "sort_order": 3}
         ]
     },
     "message": "成功"
@@ -882,7 +883,7 @@ Content-Type: `application/json`。
 curl -X POST http://localhost:6768/api/admin/countries \
   -H 'Authorization: Bearer {admin_token}' \
   -H 'Content-Type: application/json' \
-  -d '{"id":"KE","name_zh":"肯尼亚","name_en":"Kenya","sort_order":7}'
+  -d '{"id":"KE","name":"肯尼亚","name_en":"Kenya","sort_order":7}'
 ```
 
 **响应（201）：**
@@ -891,7 +892,7 @@ curl -X POST http://localhost:6768/api/admin/countries \
 {
     "success": true,
     "data": {
-        "item": {"id": "KE", "name_zh": "肯尼亚", "name_en": "Kenya", "sort_order": 7}
+        "item": {"id": "KE", "name": "肯尼亚", "name_en": "Kenya", "sort_order": 7}
     },
     "message": "创建成功"
 }
@@ -905,7 +906,7 @@ curl -X POST http://localhost:6768/api/admin/countries \
 curl -X PUT http://localhost:6768/api/admin/countries/KE \
   -H 'Authorization: Bearer {admin_token}' \
   -H 'Content-Type: application/json' \
-  -d '{"name_zh":"肯尼亚共和国"}'
+  -d '{"name":"肯尼亚共和国"}'
 ```
 
 ### 删除（仅 admin）
@@ -954,6 +955,7 @@ news 接口独立于通用后台，**支持正文 content 字段的读写**。�
 | `status`     | string | 否  | `draft` / `published` / 不传返回全部          |
 | `type`       | string | 否  | `cooperation` / `hotspot` / `update` |
 | `country_id` | string | 否  | 按国家筛选 |
+| `tag_id`     | int    | 否  | 按标签筛选 |
 | `date_from`  | string | 否  | 发布日期起始 (YYYY-MM-DD) |
 | `date_to`    | string | 否  | 发布日期截止 (YYYY-MM-DD) |
 | `keyword`    | string | 否  | 按标题模糊搜索 |
@@ -993,8 +995,8 @@ curl -H 'Authorization: Bearer {token}' \
                 {"value": "hotspot", "label_zh": "合规热点"},
                 {"value": "update", "label_zh": "法规更新"}
             ],
-            "countries": [{"id": "ZA", "name_zh": "南非"}],
-            "tags": [{"id": 7, "name_zh": "数据安全"}]
+            "countries": [{"id": "ZA", "name": "南非"}],
+            "tags": [{"id": 7, "name": "数据安全"}]
         }
     },
     "message": "成功"
@@ -1308,7 +1310,7 @@ curl -H 'Authorization: Bearer {token}' \
             "page": 1,
             "per_page": 20,
             "total": 1,
-            "countries": [{"id": "ZA", "name_zh": "南非"}],
+            "countries": [{"id": "ZA", "name": "南非"}],
             "scenes": [{"id": "customs", "label_zh": "海关进出口"}]
         }
     },

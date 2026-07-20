@@ -6,21 +6,25 @@ class DiagnosisRecord(db.Model):
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id'), nullable=True)
-    country_id = db.Column(db.String(10), db.ForeignKey('countries.id'))
-    size_id = db.Column(db.String(20), db.ForeignKey('company_sizes.id'))
-    budget_id = db.Column(db.String(20), db.ForeignKey('budget_ranges.id'))
+    country = db.Column(db.String(30))
+    company_size = db.Column(db.String(20))
+    budget_range = db.Column(db.String(20))
+    business_model = db.Column(db.String(20))
+    task_id = db.Column(db.String(100))
+    status = db.Column(db.String(30))
+    param = db.Column(db.JSON)
     created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), nullable=False)
 
 
-class DiagnosisRecordScene(db.Model):
-    __tablename__ = 'diagnosis_record_scenes'
+class DiagnosisResult(db.Model):
+    __tablename__ = 'diagnosis_results'
 
-    record_id = db.Column(db.BigInteger, db.ForeignKey('diagnosis_records.id'), primary_key=True)
-    scene_id = db.Column(db.String(20), db.ForeignKey('compliance_scenes.id'), primary_key=True)
-
-
-class DiagnosisRecordLaw(db.Model):
-    __tablename__ = 'diagnosis_record_laws'
-
-    record_id = db.Column(db.BigInteger, db.ForeignKey('diagnosis_records.id'), primary_key=True)
-    law_id = db.Column(db.BigInteger, db.ForeignKey('laws.id'), primary_key=True)
+    record_id = db.Column(db.BigInteger, db.ForeignKey('diagnosis_records.id', ondelete='CASCADE'), primary_key=True)
+    result = db.Column(db.JSON)
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        server_default=db.func.current_timestamp(),
+        onupdate=db.func.current_timestamp(),
+        nullable=False,
+    )

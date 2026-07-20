@@ -43,10 +43,15 @@ def _ref_data(resource):
 
 # -- Generic content table CRUD (with draft support) --
 
-def list_items(model, resource, page=1, per_page=20, status=None, filters=None):
+def list_items(model, resource, page=1, per_page=20, status=None, filters=None, tag_id=None):
     query = model.query
     if status:
         query = query.filter(model.status == status)
+    # tag filter for news (tag_id is not a column on News model)
+    if tag_id:
+        from app.models.news import NewsTagRelation
+        tagged_ids = [r.news_id for r in NewsTagRelation.query.filter_by(tag_id=tag_id).all()]
+        query = query.filter(model.id.in_(tagged_ids))
     if filters:
         for field, value in filters.items():
             if hasattr(model, field) and value is not None:

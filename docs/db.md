@@ -69,50 +69,29 @@
 | `created_at` | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | `updated_at` | DATETIME | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
 
-### company_sizes
-
-| 字段              | 类型          | 约束        | 说明                                 |
-|-----------------|-------------|-----------|------------------------------------|
-| `id`            | VARCHAR(20) | PK        | 如 `micro`、`small`、`medium`、`large` |
-| `label_zh`      | VARCHAR(50) | NOT NULL  | 中文标签                               |
-| `min_employees` | INT         |           | 人数下限                               |
-| `max_employees` | INT         |           | 人数上限                               |
-| `sort_order`    | INT         | DEFAULT 0 | 排序                                 |
-
-### budget_ranges
-
-| 字段           | 类型          | 约束        | 说明                     |
-|--------------|-------------|-----------|------------------------|
-| `id`         | VARCHAR(20) | PK        | 如 `lt100k`、`100k-500k` |
-| `label_zh`   | VARCHAR(50) | NOT NULL  | 中文标签                   |
-| `min_amount` | INT         |           | 金额下限（万元）               |
-| `max_amount` | INT         |           | 金额上限（万元）               |
-| `sort_order` | INT         | DEFAULT 0 | 排序                     |
-
 ### diagnosis_records
 
 | 字段           | 类型          | 约束                                  | 说明   |
 |--------------|-------------|-------------------------------------|------|
 | `id`         | BIGINT      | PK, AUTO_INCREMENT                  | 主键   |
 | `user_id`    | BIGINT      | FK → users.id, NULLABLE             | 操作用户 |
-| `country_id` | VARCHAR(10) | FK → countries.id                   | 目的国  |
-| `size_id`    | VARCHAR(20) | FK → company_sizes.id               | 企业规模 |
-| `budget_id`  | VARCHAR(20) | FK → budget_ranges.id               | 预算区间 |
-| `created_at` | DATETIME    | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 生成时间 |
+| `country`        | VARCHAR(30) |                                  | 目的国 |
+| `company_size`   | VARCHAR(20) |                                  | 企业规模 |
+| `budget_range`   | VARCHAR(20) |                                  | 预算区间 |
+| `business_model` | VARCHAR(20) |                                  | 业务模式 |
+| `task_id`        | VARCHAR(100) |                                 | 报告生成任务 ID |
+| `status`         | VARCHAR(30)  |                                 | 任务状态 |
+| `param`          | JSON         |                                 | 报告生成参数 |
+| `created_at`     | DATETIME    | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 生成时间 |
 
-### diagnosis_record_scenes
+### diagnosis_results
 
-| 字段          | 类型          | 约束                            | 说明    |
-|-------------|-------------|-------------------------------|-------|
-| `record_id` | BIGINT      | PK, FK → diagnosis_records.id | 诊断记录  |
-| `scene_id`  | VARCHAR(20) | PK, FK → compliance_scenes.id | 选择的场景 |
-
-### diagnosis_record_laws
-
-| 字段          | 类型     | 约束                            | 说明     |
-|-------------|--------|-------------------------------|--------|
-| `record_id` | BIGINT | PK, FK → diagnosis_records.id | 诊断记录   |
-| `law_id`    | BIGINT | PK, FK → laws.id              | 匹配到的法规 |
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `record_id` | BIGINT | PK, FK → diagnosis_records.id ON DELETE CASCADE | 关联诊断 |
+| `result` | JSON | | 完整报告数据 |
+| `created_at` | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| `updated_at` | DATETIME | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
 
 ---
 
@@ -192,7 +171,7 @@
 | 字段           | 类型           | 约束                              | 说明     |
 |--------------|--------------|---------------------------------|--------|
 | `id`         | BIGINT       | PK, AUTO_INCREMENT              | 主键     |
-| `name_zh`    | VARCHAR(200) | NOT NULL                        | 机构中文名  |
+| `name`       | VARCHAR(200) | NOT NULL                        | 机构名称  |
 | `scene_id`   | VARCHAR(30)  | FK → agency_scenes.id, NOT NULL | 所属场景   |
 | `region`     | VARCHAR(300) |                                 | 覆盖区域   |
 | `phone`      | VARCHAR(50)  |                                 | 联系电话   |
@@ -250,9 +229,7 @@ UNION ALL SELECT 'agencies', CAST(COUNT(*) AS CHAR), '合作合规机构', 4 FRO
 ## ER 关系概览
 
 ```
-users ──< diagnosis_records >── diagnosis_record_scenes ──< compliance_scenes
-                  │
-                  └── diagnosis_record_laws ──< laws
+users ──< diagnosis_records ── diagnosis_results
                   │
 countries ──< laws
 laws ── laws_drafts >── users

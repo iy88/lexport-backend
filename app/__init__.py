@@ -46,7 +46,6 @@ def create_app(config_name=None):
         }, 500
 
     with app.app_context():
-        os.makedirs(os.path.join(app.config['UPLOAD_PATH'], 'laws'), exist_ok=True)
         db.create_all()
         db.session.execute(db.text(
             "CREATE OR REPLACE VIEW platform_stats AS "
