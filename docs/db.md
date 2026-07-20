@@ -15,7 +15,7 @@
 | `password_hash`  | VARCHAR(255)         | NOT NULL                                                        | 密码哈希（bcrypt） |
 | `email`          | VARCHAR(255)         | NULLABLE, UNIQUE, INDEX                                         | 邮箱           |
 | `email_verified` | BOOLEAN              | NOT NULL, DEFAULT FALSE                                         | 邮箱是否已验证      |
-| `role`           | ENUM('user','admin') | NOT NULL, DEFAULT 'user'                                        | 角色           |
+| `role`           | ENUM('user','editor','admin') | NOT NULL, DEFAULT 'user'                                        | 角色           |
 | `created_at`     | DATETIME             | NOT NULL, DEFAULT CURRENT_TIMESTAMP                             | 创建时间         |
 | `updated_at`     | DATETIME             | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新时间         |
 
@@ -79,9 +79,10 @@
 | `company_size`   | VARCHAR(20) |                                  | 企业规模 |
 | `budget_range`   | VARCHAR(20) |                                  | 预算区间 |
 | `business_model` | VARCHAR(20) |                                  | 业务模式 |
-| `task_id`        | VARCHAR(100) |                                 | 报告生成任务 ID |
-| `status`         | VARCHAR(30)  |                                 | 任务状态 |
-| `param`          | JSON         |                                 | 报告生成参数 |
+| `task_id`        | VARCHAR(100) | UNIQUE, INDEX                   | 报告生成任务 ID |
+| `status`         | VARCHAR(30)  | INDEX                           | 任务状态 |
+| `param`          | JSON         | NOT NULL                        | 报告生成参数及创建时的 AI 版本、数据截止日期快照 |
+| `deleted`        | BOOLEAN      | NOT NULL, DEFAULT FALSE, INDEX  | 软删除标记 |
 | `created_at`     | DATETIME    | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 生成时间 |
 
 ### diagnosis_results
@@ -89,9 +90,22 @@
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
 | `record_id` | BIGINT | PK, FK → diagnosis_records.id ON DELETE CASCADE | 关联诊断 |
-| `result` | JSON | | 完整报告数据 |
+| `result` | JSON | NOT NULL | 完整报告数据 |
 | `created_at` | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | `updated_at` | DATETIME | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
+
+> **迁移说明**：现有数据库需手动执行 ALTER TABLE 添加索引和约束，不可依赖 `db.create_all()` 修改旧表：
+> ```sql
+> ALTER TABLE diagnosis_records
+>   ADD UNIQUE KEY `task_id` (`task_id`),
+>   ADD KEY `status` (`status`),
+>   MODIFY `param` json NOT NULL;
+> ALTER TABLE diagnosis_results
+>   MODIFY `result` json NOT NULL;
+> ALTER TABLE diagnosis_records
+>   ADD COLUMN `deleted` tinyint(1) NOT NULL DEFAULT 0 AFTER `param`,
+>   ADD KEY `deleted` (`deleted`);
+> ```
 
 ---
 

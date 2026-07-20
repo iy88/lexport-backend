@@ -284,6 +284,7 @@ curl "http://localhost:5000/api/laws?country_id=ZA&page=1&per_page=5"
                 "scene_id": "customs",
                 "effective_date": "2024-01-15",
                 "summary": "制造业进口原材料需提前30天备案...",
+                "has_file": true,
                 "created_at": "2026-05-17T12:00:00"
             }
         ],
@@ -1655,3 +1656,357 @@ curl -X PUT http://localhost:5000/api/admin/users/2 \
 | 401      | `AUTH_ERROR`       | 未登录或 token 无效 |
 | 403      | `AUTH_ERROR`       | 权限不足          |
 | 404      | `NOT_FOUND`        | 记录不存在         |
+
+---
+
+## 14. 合规报告
+
+> 异步生成合规报告：上传企业信息 + 可选附件，通过百炼 AI 生成诊断报告，轮询获取结果。
+
+### 14.1 创建报告任务
+
+**POST** `/api/compliance-reports`
+
+需要携带 JWT access token。Content-Type: `multipart/form-data`。
+
+#### 请求参数
+
+| 字段              | 类型     | 必填 | 说明            |
+|-----------------|--------|----|---------------|
+| `query`         | string | 是  | 诊断需求/企业概况描述   |
+| `company_name`  | string | 是  | 公司名称          |
+| `industry`      | string | 是  | 所属行业          |
+| `company_size`  | string | 是  | 企业规模          |
+| `target_country` | string | 是  | 目标出海国家        |
+| `business_model` | string | 是  | 业务模式          |
+| `budget_range`  | string | 是  | 预算区间          |
+| `documents`     | file   | 否  | 附件（可多选，最多 5 个） |
+
+**文件限制**：单个文件 ≤ 20MB，支持 PDF、DOC、DOCX、TXT、HTML。
+
+#### 响应状态
+
+| HTTP 状态码 | 错误码                | 消息                | 说明               |
+|----------|--------------------|--------------------|------------------|
+| 202      | -                  | 报告生成任务已创建        | 创建成功，后台生成中      |
+| 400      | `VALIDATION_ERROR` | 缺少必填字段 / 不支持的文件类型 | 参数或文件不合法        |
+| 413      | `FILE_TOO_LARGE`   | 上传文件总大小超过限制       | 请求体超过 105MB      |
+| 401      | `AUTH_ERROR`       | 缺少认证令牌            | 未登录或 token 无效   |
+| 502      | `OSS_UPLOAD_FAILED` | 文件上传至 OSS 失败      | OSS 不可用          |
+| 502      | `BAILIAN_ERROR`    | 调用百炼失败            | 百炼 API 不可用或调用失败 |
+| 500      | `CONFIG_ERROR`     | 报告生成服务未配置         | `REPORT_GENERATOR_APPID`、`BAILIAN_API_KEY`、`REPORT_AI_VERSION` 或 `REPORT_DATA_CUTOFF_DATE` 未配置 |
+
+#### 请求示例
+
+```bash
+curl -X POST http://localhost:5000/api/compliance-reports \
+  -H 'Authorization: Bearer <token>' \
+  -F 'query=我公司计划在南非设立制造工厂，请分析合规要求' \
+  -F 'company_name=示例制造有限公司' \
+  -F 'industry=家电制造' \
+  -F 'company_size=中型' \
+  -F 'target_country=南非' \
+  -F 'business_model=合资' \
+  -F 'budget_range=100-500万' \
+  -F 'documents=@business_plan.pdf'
+```
+
+#### 响应示例（成功 202）
+
+```json
+{
+    "success": true,
+    "data": {
+        "id": 1,
+        "task_id": "resp_abc123def456",
+        "status": "in_progress",
+        "company_name": "示例制造有限公司",
+        "industry": "家电制造",
+        "country": "南非",
+        "company_size": "中型",
+        "budget_range": "100-500万",
+        "business_model": "合资",
+        "doc_count": 1,
+        "deleted": false,
+        "created_at": "2026-07-21T10:00:00"
+    },
+    "message": "报告生成任务已创建"
+}
+```
+
+### 14.2 报告列表
+
+**GET** `/api/compliance-reports?page=1&per_page=20`
+
+需要携带 JWT access token。返回当前用户自己的未删除记录。
+
+#### 查询参数
+
+| 字段        | 类型  | 必填 | 默认值 | 说明   |
+|-----------|-----|----|-----|------|
+| `page`    | int | 否  | 1   | 页码   |
+| `per_page` | int | 否  | 20  | 每页数量 |
+
+#### 响应示例（成功 200）
+
+```json
+{
+    "success": true,
+    "data": {
+        "reports": [
+            {
+                "id": 1,
+                "company_name": "示例制造有限公司",
+                "industry": "家电制造",
+                "country": "南非",
+                "company_size": "中型",
+                "budget_range": "100-500万",
+                "business_model": "合资",
+                "doc_count": 1,
+                "status": "completed",
+                "deleted": false,
+                "created_at": "2026-07-21T10:00:00"
+            }
+        ],
+        "meta": {
+            "page": 1,
+            "per_page": 20,
+            "total": 1
+        }
+    },
+    "message": "成功"
+}
+```
+
+### 14.3 报告详情
+
+**GET** `/api/compliance-reports/{id}`
+
+需要携带 JWT access token。只能访问自己的未删除记录，无权限或已删除按 404 处理。
+
+管理员查看任意记录（含已删除）请使用 `GET /api/admin/compliance-reports/{id}`。
+
+`result_text` 是符合前端报告 schema 的 JSON 字符串。
+
+#### 响应示例（成功 200，已完成）
+
+```json
+{
+    "success": true,
+    "data": {
+        "id": 1,
+        "company_name": "示例制造有限公司",
+        "industry": "家电制造",
+        "country": "南非",
+        "company_size": "中型",
+        "budget_range": "100-500万",
+        "business_model": "合资",
+        "doc_count": 1,
+        "status": "completed",
+        "deleted": false,
+        "result_text": "<符合前端 report.json schema 的完整 JSON 字符串>",
+        "created_at": "2026-07-21T10:00:00"
+    },
+    "message": "成功"
+}
+```
+
+#### 响应示例（成功 200，处理中）
+
+```json
+{
+    "success": true,
+    "data": {
+        "id": 2,
+        "company_name": "示例科技有限公司",
+        "industry": "数字基础设施",
+        "country": "尼日利亚",
+        "company_size": "大型",
+        "budget_range": "500万以上",
+        "business_model": "独资",
+        "doc_count": 0,
+        "status": "in_progress",
+        "deleted": false,
+        "result_text": null,
+        "created_at": "2026-07-21T10:05:00"
+    },
+    "message": "成功"
+}
+```
+
+#### 响应状态
+
+| HTTP 状态码 | 错误码          | 消息      | 说明         |
+|----------|--------------|---------|------------|
+| 200      | -            | 成功      | 返回报告详情     |
+| 401      | `AUTH_ERROR` | 缺少认证令牌  | 未登录        |
+| 404      | `NOT_FOUND`  | 报告不存在   | 记录不存在或无权限  |
+
+### 14.4 删除报告
+
+**DELETE** `/api/compliance-reports/{id}`
+
+需要携带 JWT access token。仅可软删除自己的报告。不会物理删除 `diagnosis_records`
+或 `diagnosis_results`，也不取消正在执行的百炼任务。重复删除同一记录仍返回成功。
+
+管理员删除任意报告请使用 `DELETE /api/admin/compliance-reports/{id}`。
+
+#### 响应示例（成功 200）
+
+```json
+{
+    "success": true,
+    "data": {
+        "id": 1,
+        "company_name": "示例制造有限公司",
+        "industry": "家电制造",
+        "country": "南非",
+        "company_size": "中型",
+        "budget_range": "100-500万",
+        "business_model": "合资",
+        "doc_count": 1,
+        "status": "completed",
+        "deleted": true,
+        "created_at": "2026-07-21T10:00:00"
+    },
+    "message": "报告已删除"
+}
+```
+
+#### 响应状态
+
+| HTTP 状态码 | 错误码          | 说明                    |
+|----------|--------------|-----------------------|
+| 200      | -            | 删除成功或记录已经处于删除状态      |
+| 401      | `AUTH_ERROR` | 未登录                   |
+| 404      | `NOT_FOUND`  | 记录不存在，或普通用户并非记录所有者 |
+
+---
+
+## 15. 合规报告后台管理
+
+所有接口需要 JWT，仅 `admin` 角色可访问（`editor` 返回 403）。可查看和删除所有用户的记录，包括已软删除记录。
+
+### 15.1 全部报告列表
+
+**GET** `/api/admin/compliance-reports?page=1&per_page=20`
+
+返回所有用户的全部记录，含已软删除记录。
+
+#### 查询参数
+
+| 字段        | 类型  | 必填 | 默认值 | 说明   |
+|-----------|-----|----|-----|------|
+| `page`    | int | 否  | 1   | 页码   |
+| `per_page` | int | 否  | 20  | 每页数量 |
+
+#### 响应示例（成功 200）
+
+```json
+{
+    "success": true,
+    "data": {
+        "reports": [
+            {
+                "id": 1,
+                "company_name": "示例制造有限公司",
+                "industry": "家电制造",
+                "country": "南非",
+                "company_size": "中型",
+                "budget_range": "100-500万",
+                "business_model": "合资",
+                "doc_count": 1,
+                "status": "completed",
+                "deleted": false,
+                "created_at": "2026-07-21T10:00:00"
+            }
+        ],
+        "meta": {
+            "page": 1,
+            "per_page": 20,
+            "total": 1
+        }
+    },
+    "message": "成功"
+}
+```
+
+### 15.2 任意报告详情
+
+**GET** `/api/admin/compliance-reports/{id}`
+
+返回任意报告详情（含已删除记录），无需权限校验。
+
+#### 响应示例（成功 200）
+
+```json
+{
+    "success": true,
+    "data": {
+        "id": 1,
+        "company_name": "示例制造有限公司",
+        "industry": "家电制造",
+        "country": "南非",
+        "company_size": "中型",
+        "budget_range": "100-500万",
+        "business_model": "合资",
+        "doc_count": 1,
+        "status": "completed",
+        "deleted": false,
+        "result_text": "<符合前端 report.json schema 的完整 JSON 字符串>",
+        "created_at": "2026-07-21T10:00:00"
+    },
+    "message": "成功"
+}
+```
+
+#### 响应状态
+
+| HTTP 状态码 | 错误码          | 消息    | 说明          |
+|----------|--------------|-------|-------------|
+| 200      | -            | 成功    |              |
+| 401      | `AUTH_ERROR` | 缺少认证令牌 | 未登录         |
+| 403      | `AUTH_ERROR` | 权限不足  | 非 admin 角色 |
+| 404      | `NOT_FOUND`  | 报告不存在  |              |
+
+### 15.3 删除任意报告
+
+**DELETE** `/api/admin/compliance-reports/{id}`
+
+软删除任意用户的报告。
+
+```bash
+curl -X DELETE http://localhost:6768/api/admin/compliance-reports/1 \
+  -H 'Authorization: Bearer {admin_token}'
+```
+
+#### 响应示例（成功 200）
+
+```json
+{
+    "success": true,
+    "data": {
+        "id": 1,
+        "company_name": "示例制造有限公司",
+        "industry": "家电制造",
+        "country": "南非",
+        "company_size": "中型",
+        "budget_range": "100-500万",
+        "business_model": "合资",
+        "doc_count": 1,
+        "status": "completed",
+        "deleted": true,
+        "created_at": "2026-07-21T10:00:00"
+    },
+    "message": "报告已删除"
+}
+```
+
+#### 响应状态
+
+| HTTP 状态码 | 错误码          | 说明          |
+|----------|--------------|-------------|
+| 200      | -            | 删除成功        |
+| 401      | `AUTH_ERROR` | 未登录         |
+| 403      | `AUTH_ERROR` | 非 admin 角色 |
+| 404      | `NOT_FOUND`  | 记录不存在       |

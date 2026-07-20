@@ -11,5 +11,7 @@ def register_blueprints(app):
     from app.routes.stat import stat_bp
     app.register_blueprint(news_bp, url_prefix='/api/news')
     from app.routes.admin import admin_bp
+    from app.routes.compliance import compliance_bp
     app.register_blueprint(stat_bp, url_prefix='/api/stats')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    app.register_blueprint(compliance_bp, url_prefix='/api/compliance-reports')

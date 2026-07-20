@@ -399,6 +399,44 @@ def _parse_law_form():
     return {k: form.get(k) for k in fields if form.get(k) is not None}
 
 
+# ===================== Compliance Reports (admin, dedicated) =====================
+
+
+@admin_bp.route('/compliance-reports', methods=['GET'])
+@jwt_required(role='admin')
+def list_compliance_reports():
+    """List all compliance reports including soft-deleted."""
+    from app.services import compliance_service
+    page = max(1, request.args.get('page', 1, type=int) or 1)
+    per_page = min(100, max(1, request.args.get('per_page', 20, type=int) or 20))
+    result = compliance_service.list_all_reports(page=page, per_page=per_page)
+    return jsonify({'success': True, 'data': result, 'message': '成功'}), 200
+
+
+@admin_bp.route('/compliance-reports/<int:report_id>', methods=['GET'])
+@jwt_required(role='admin')
+def get_compliance_report(report_id):
+    """Get any compliance report detail including soft-deleted."""
+    from app.services import compliance_service
+    try:
+        result = compliance_service.get_any_report(report_id)
+        return jsonify({'success': True, 'data': result, 'message': '成功'}), 200
+    except AppError as e:
+        return e.to_response()
+
+
+@admin_bp.route('/compliance-reports/<int:report_id>', methods=['DELETE'])
+@jwt_required(role='admin')
+def delete_compliance_report(report_id):
+    """Soft-delete any compliance report."""
+    from app.services import compliance_service
+    try:
+        result = compliance_service.admin_delete_report(report_id)
+        return jsonify({'success': True, 'data': result, 'message': '报告已删除'}), 200
+    except AppError as e:
+        return e.to_response()
+
+
 # ===================== Reference Tables (catch-all for admin CRUD) =====================
 
 @admin_bp.route('/<string:resource>', methods=['GET'])

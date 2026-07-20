@@ -14,3 +14,5 @@ htmlcov/
 *.sql
 uploads
 .DS_Store
+celerybeat-schedule*
+logs/

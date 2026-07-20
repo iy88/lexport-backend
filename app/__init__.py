@@ -45,6 +45,13 @@ def create_app(config_name=None):
             'error': {'code': 'INTERNAL_ERROR', 'message': '服务器内部错误'}
         }, 500
 
+    @app.errorhandler(413)
+    def handle_request_too_large(e):
+        return {
+            'success': False,
+            'error': {'code': 'FILE_TOO_LARGE', 'message': '上传文件总大小超过限制'}
+        }, 413
+
     with app.app_context():
         db.create_all()
         db.session.execute(db.text(
