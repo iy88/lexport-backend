@@ -1,12 +1,12 @@
 import bcrypt
 
-from app.extensions import db
+from app.extensions import bigint_pk_type, db
 
 
 class User(db.Model):
     __tablename__ = 'users'
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(bigint_pk_type(), primary_key=True, autoincrement=True)
     username = db.Column(db.String(50), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), nullable=True, unique=True, index=True)

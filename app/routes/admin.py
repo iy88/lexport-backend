@@ -1,17 +1,14 @@
-import os
-import uuid
-
-from flask import Blueprint, current_app, request, jsonify, g
+from flask import Blueprint, request, jsonify, g
 
 from app.extensions import db
 from app.models.agency import Agency, AgencyCategory, AgencyScene
 from app.models.content import NewsText
 from app.models.country import Country
-from app.models.draft import LawDraft, NewsDraft, AgencyDraft
+from app.models.draft import NewsDraft, AgencyDraft
 from app.models.law import ComplianceScene, Law
 from app.models.news import News, NewsTag, NewsTagRelation
 from app.models.user import User
-from app.services import admin_service
+from app.services import admin_service, law_service
 from app.utils.auth_utils import jwt_required
 from app.utils.errors import AppError, NotFoundError
 
@@ -30,28 +27,6 @@ REF_MODELS = {
 }
 
 EDITOR_RESTRICTED = set()
-
-
-# -- Helpers --
-
-def _save_uploaded_file(file):
-    ext = os.path.splitext(file.filename)[1]
-    filename = str(uuid.uuid4()) + ext
-    upload_dir = os.path.join(current_app.config['UPLOAD_PATH'], 'laws')
-    os.makedirs(upload_dir, exist_ok=True)
-    file.save(os.path.join(upload_dir, filename))
-    return filename
-
-
-def _remove_file(filename):
-    if not filename:
-        return
-    try:
-        filepath = os.path.join(current_app.config['UPLOAD_PATH'], 'laws', filename)
-        if os.path.exists(filepath):
-            os.remove(filepath)
-    except OSError:
-        pass
 
 
 # ===================== Agencies (content, generic) =====================
@@ -252,7 +227,8 @@ def _news_detail(item_id):
     return item
 
 
-# ===================== Laws (dedicated, multipart + file + draft) =====================
+# ===================== Laws (dedicated, multipart + file + draft + OSS) =====================
+
 
 @admin_bp.route('/laws', methods=['GET'])
 @jwt_required
@@ -260,17 +236,21 @@ def list_laws():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     status = request.args.get('status')
+    review_status = request.args.get('review_status')
     filters = {k: request.args.get(k) for k in [
         'country_id', 'scene_id', 'keyword',
     ] if request.args.get(k)}
-    result = admin_service.list_items(Law, 'laws', page, per_page, status, filters)
+    result = law_service.list_laws(
+        page=page, per_page=per_page, status=status,
+        review_status=review_status, filters=filters,
+    )
     return jsonify({'success': True, 'data': result, 'message': '成功'}), 200
 
 
 @admin_bp.route('/laws/<int:item_id>', methods=['GET'])
 @jwt_required
 def get_law(item_id):
-    result = admin_service.get_item_with_draft(Law, LawDraft, item_id, 'law_id')
+    result = law_service.get_law_with_draft(item_id)
     return jsonify({'success': True, 'data': result, 'message': '成功'}), 200
 
 
@@ -279,11 +259,7 @@ def get_law(item_id):
 def create_law():
     data = _parse_law_form()
     uploaded = request.files.get('file')
-    if uploaded and uploaded.filename:
-        data['secure_name'] = _save_uploaded_file(uploaded)
-        data['filename'] = uploaded.filename
-
-    result = admin_service.create_item(Law, data, g.current_user)
+    result = law_service.create_law(data, uploaded, g.current_user)
     return jsonify({'success': True, 'data': result, 'message': '创建成功'}), 201
 
 
@@ -292,37 +268,11 @@ def create_law():
 def update_law(item_id):
     data = _parse_law_form()
     uploaded = request.files.get('file')
-
-    if g.current_user.role == 'admin' and uploaded and uploaded.filename:
-        old = Law.query.get(item_id)
-        if old and old.secure_name:
-            _remove_file(old.secure_name)
-        data['secure_name'] = _save_uploaded_file(uploaded)
-        data['filename'] = uploaded.filename
-
-    result = admin_service.update_item_with_draft(Law, LawDraft, item_id, data, g.current_user, 'law_id')
-
-    # editor file upload: save separately for draft/preview
-    if g.current_user.role != 'admin' and uploaded and uploaded.filename:
-        law = Law.query.get(item_id)
-        draft = LawDraft.query.filter_by(law_id=item_id).first()
-        if draft and law and law.status != 'draft':
-            new_secure = _save_uploaded_file(uploaded)
-            draft_data = dict(draft.data)
-            draft_data['secure_name'] = new_secure
-            draft_data['filename'] = uploaded.filename
-            draft.data = draft_data
-            db.session.commit()
-            result['item']['secure_name'] = new_secure
-            result['item']['filename'] = uploaded.filename
-        elif law and law.status == 'draft':
-            if law.secure_name:
-                _remove_file(law.secure_name)
-            law.secure_name = _save_uploaded_file(uploaded)
-            law.filename = uploaded.filename
-            db.session.commit()
-
-    return jsonify({'success': True, 'data': result, 'message': '更新成功'}), 200
+    try:
+        result = law_service.update_law(item_id, data, uploaded, g.current_user)
+        return jsonify({'success': True, 'data': result, 'message': '更新成功'}), 200
+    except AppError as e:
+        return e.to_response()
 
 
 @admin_bp.route('/laws/<int:item_id>', methods=['DELETE'])
@@ -333,22 +283,21 @@ def delete_law(item_id):
         raise NotFoundError('记录不存在')
     if g.current_user.role != 'admin' and law.status != 'draft':
         raise AppError('AUTH_ERROR', '仅可删除草稿', 403)
-    if law.secure_name:
-        _remove_file(law.secure_name)
-    admin_service.delete_item(Law, item_id)
+    try:
+        law_service.delete_law(item_id, g.current_user)
+    except AppError as e:
+        return e.to_response()
     return jsonify({'success': True, 'data': None, 'message': '删除成功'}), 200
 
 
 @admin_bp.route('/laws/<int:item_id>/approve', methods=['POST'])
 @jwt_required(role='admin')
 def approve_law(item_id):
-    law = Law.query.get(item_id)
-    old_secure = law.secure_name if law else None
-    result = admin_service.approve_item(Law, LawDraft, item_id, 'law_id')
-    new_secure = result['item'].get('secure_name')
-    if old_secure and old_secure != new_secure:
-        _remove_file(old_secure)
-    return jsonify({'success': True, 'data': result, 'message': '审核通过'}), 200
+    try:
+        result = law_service.approve_law(item_id)
+        return jsonify({'success': True, 'data': result, 'message': '审核通过'}), 200
+    except AppError as e:
+        return e.to_response()
 
 
 @admin_bp.route('/laws/approve-batch', methods=['POST'])
@@ -358,32 +307,29 @@ def batch_approve_law():
     ids = data.get('ids', [])
     if not ids:
         raise AppError('VALIDATION_ERROR', 'ids 不能为空', 400)
-
-    # snapshot old secure names before transaction
-    old_secure_map = {}
-    for lid in ids:
-        law = Law.query.get(lid)
-        if law:
-            old_secure_map[lid] = law.secure_name
-
-    result = admin_service.batch_approve_items(Law, LawDraft, ids, 'law_id')
-
-    # cleanup old files after successful commit
-    for lid in ids:
-        old = old_secure_map.get(lid)
-        new_law = Law.query.get(lid)
-        new = new_law.secure_name if new_law else None
-        if old and old != new:
-            _remove_file(old)
-
+    result = law_service.batch_approve_laws(ids)
     return jsonify({'success': True, 'data': result, 'message': '批量审核完成'}), 200
 
 
 @admin_bp.route('/laws/<int:item_id>/suspend', methods=['POST'])
 @jwt_required(role='admin')
 def suspend_law(item_id):
-    result = admin_service.suspend_item(Law, LawDraft, item_id, 'law_id')
-    return jsonify({'success': True, 'data': result, 'message': '已挂起'}), 200
+    try:
+        result = law_service.suspend_law(item_id)
+        return jsonify({'success': True, 'data': result, 'message': '已挂起'}), 200
+    except AppError as e:
+        return e.to_response()
+
+
+@admin_bp.route('/laws/<int:item_id>/draft', methods=['DELETE'])
+@jwt_required(role='admin')
+def discard_law_draft(item_id):
+    """Discard a pending LawDraft, keeping the published main version."""
+    try:
+        result = law_service.discard_law_draft(item_id)
+        return jsonify({'success': True, 'data': result, 'message': '草稿已丢弃'}), 200
+    except AppError as e:
+        return e.to_response()
 
 
 def _parse_law_form():

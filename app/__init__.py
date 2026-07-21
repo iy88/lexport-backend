@@ -5,7 +5,7 @@ import os
 load_dotenv()
 
 
-def create_app(config_name=None):
+def create_app(config_name=None, initialize_database=True):
     from config import DevelopmentConfig, ProductionConfig, TestingConfig
 
     if config_name is None:
@@ -52,15 +52,16 @@ def create_app(config_name=None):
             'error': {'code': 'FILE_TOO_LARGE', 'message': '上传文件总大小超过限制'}
         }, 413
 
-    with app.app_context():
-        db.create_all()
-        db.session.execute(db.text(
-            "CREATE OR REPLACE VIEW platform_stats AS "
-            "SELECT 'countries' AS id, CAST(COUNT(*) AS CHAR) AS value, '覆盖国家（持续拓展中）' AS label_zh, 1 AS sort_order FROM countries "
-            "UNION ALL SELECT 'laws', CAST(COUNT(*) AS CHAR), '法规条文收录', 2 FROM laws "
-            "UNION ALL SELECT 'scenes', CAST(COUNT(*) AS CHAR), '高频合规场景', 3 FROM compliance_scenes "
-            "UNION ALL SELECT 'agencies', CAST(COUNT(*) AS CHAR), '合作合规机构', 4 FROM agencies"
-        ))
-        db.session.commit()
+    if initialize_database:
+        with app.app_context():
+            db.create_all()
+            db.session.execute(db.text(
+                "CREATE OR REPLACE VIEW platform_stats AS "
+                "SELECT 'countries' AS id, CAST(COUNT(*) AS CHAR) AS value, '覆盖国家（持续拓展中）' AS label_zh, 1 AS sort_order FROM countries "
+                "UNION ALL SELECT 'laws', CAST(COUNT(*) AS CHAR), '法规条文收录', 2 FROM laws "
+                "UNION ALL SELECT 'scenes', CAST(COUNT(*) AS CHAR), '高频合规场景', 3 FROM compliance_scenes "
+                "UNION ALL SELECT 'agencies', CAST(COUNT(*) AS CHAR), '合作合规机构', 4 FROM agencies"
+            ))
+            db.session.commit()
 
     return app

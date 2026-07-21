@@ -1,10 +1,10 @@
-from app.extensions import db
+from app.extensions import bigint_pk_type, db
 
 
 class DiagnosisRecord(db.Model):
     __tablename__ = 'diagnosis_records'
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(bigint_pk_type(), primary_key=True, autoincrement=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id'), nullable=True)
     country = db.Column(db.String(30))
     company_size = db.Column(db.String(20))

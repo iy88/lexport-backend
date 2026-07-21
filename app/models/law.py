@@ -1,4 +1,4 @@
-from app.extensions import db
+from app.extensions import bigint_pk_type, db
 
 
 class ComplianceScene(db.Model):
@@ -12,7 +12,7 @@ class ComplianceScene(db.Model):
 class Law(db.Model):
     __tablename__ = 'laws'
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(bigint_pk_type(), primary_key=True, autoincrement=True)
     title_en = db.Column(db.String(300))
     title_cn = db.Column(db.String(300), nullable=False)
     law_number = db.Column(db.String(100))
@@ -20,8 +20,8 @@ class Law(db.Model):
     scene_id = db.Column(db.String(20), db.ForeignKey('compliance_scenes.id'), nullable=False)
     effective_date = db.Column(db.Date)
     summary = db.Column(db.Text)
-    filename = db.Column(db.String(500))
-    secure_name = db.Column(db.String(500))
+    object_name = db.Column(db.String(500), unique=True, nullable=True)
+    pending_file_name = db.Column(db.String(500))
     status = db.Column(db.Enum('draft', 'published', name='content_status_enum'), default='published', nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), nullable=False)
     updated_at = db.Column(

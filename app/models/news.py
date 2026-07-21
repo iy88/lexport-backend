@@ -1,10 +1,10 @@
-from app.extensions import db
+from app.extensions import bigint_pk_type, db
 
 
 class News(db.Model):
     __tablename__ = 'news'
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(bigint_pk_type(), primary_key=True, autoincrement=True)
     type = db.Column(db.Enum('cooperation', 'hotspot', 'update', name='news_type_enum'), nullable=False)
     title = db.Column(db.String(300), nullable=False)
     source = db.Column(db.String(200))
@@ -31,7 +31,7 @@ class News(db.Model):
 class NewsTag(db.Model):
     __tablename__ = 'news_tags'
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(bigint_pk_type(), primary_key=True, autoincrement=True)
     name_zh = db.Column(db.String(30), nullable=False, unique=True)
 
 

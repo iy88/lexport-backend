@@ -41,6 +41,7 @@ class BaseConfig:
     OSS_REGION = os.environ.get('OSS_REGION', 'cn-beijing')
     OSS_ENDPOINT = os.environ.get('OSS_ENDPOINT', 'https://oss-cn-beijing.aliyuncs.com')
     OSS_BUCKET_NAME = os.environ.get('OSS_BUCKET_NAME', '')
+    LAW_OSS_BUCKET_NAME = os.environ.get('LAW_OSS_BUCKET_NAME', '')
     OSS_SIGN_URL_EXPIRES = int(os.environ.get('OSS_SIGN_URL_EXPIRES', 7200))
 
     # Bailian (百炼) AI Platform

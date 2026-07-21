@@ -1,10 +1,9 @@
-import os
-
-from flask import Blueprint, current_app, request, jsonify, send_file
+from flask import Blueprint, redirect, request, jsonify
 
 from app.models.law import Law
 from app.services import law_service
 from app.utils.errors import AppError, NotFoundError
+from app.utils.oss_utils import generate_signed_url, head_object
 
 law_bp = Blueprint('law', __name__)
 
@@ -38,19 +37,23 @@ def get_law_detail(law_id):
 
 @law_bp.route('/<int:law_id>/download', methods=['GET'])
 def download_law_file(law_id):
+    """Redirect to a pre-signed OSS URL for the published law file."""
     try:
         law = Law.query.filter_by(id=law_id, status='published').first()
         if not law:
             raise NotFoundError('法规不存在')
-        if not law.secure_name:
+        if not law.object_name:
             raise NotFoundError('该法规无附件')
-        upload_dir = os.path.join(current_app.config['UPLOAD_PATH'], 'laws')
-        file_path = os.path.join(upload_dir, law.secure_name)
-        if not os.path.isfile(file_path):
-            raise NotFoundError('文件丢失，请联系管理员')
-        return send_file(
-            file_path,
-            download_name=law.filename, as_attachment=True
+
+        # Do not redirect to a signed URL for a missing object.  OSS
+        # configuration and transport errors remain 502 instead of being
+        # disguised as a client-side 404.
+        head_object(law.object_name, bucket_name='LAW_OSS_BUCKET_NAME')
+        signed_url = generate_signed_url(
+            law.object_name,
+            bucket_name='LAW_OSS_BUCKET_NAME',
         )
+
+        return redirect(signed_url, code=302)
     except AppError as e:
         return e.to_response()

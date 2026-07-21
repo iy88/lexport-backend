@@ -310,16 +310,16 @@ curl "http://localhost:5000/api/laws?country_id=ZA&page=1&per_page=5"
 
 **GET** `/api/laws/{id}/download`
 
-仅返回已发布法规的文件。以原始文件名作为下载名。
+返回 302 重定向至 OSS 预签名 URL（有效期 2 小时）。仅已发布且有 `object_name` 的法规可下载。
 
 ```bash
-curl -O -J http://localhost:6768/api/laws/1/download
+curl -L -O -J http://localhost:6768/api/laws/1/download
 ```
 
 | HTTP 状态码 | 错误码         | 说明        |
 |----------|-------------|-----------|
-| 200      | -           | 文件下载      |
-| 404      | `NOT_FOUND` | 法规或文件不存在 |
+| 302      | -           | 重定向至 OSS 签名 URL |
+| 404      | `NOT_FOUND` | 法规不存在、未发布或无附件 |
 
 ---
 
@@ -1248,40 +1248,60 @@ curl -X POST http://localhost:6768/api/admin/news/13/suspend \
 
 ---
 
-## 12. 法规后台管理（laws，支持文件上传 + Draft）
+## 12. 法规后台管理（laws，支持文件上传 + Draft + OSS）
 
 laws 接口独立于通用后台，**创建和更新使用 `multipart/form-data`** 以支持法规文件上传。
+
+法律原件存储于独立的 OSS 知识库 Bucket（`LAW_OSS_BUCKET_NAME`）。`laws.status` 仅表示发布状态（`draft` | `published`）；已发布记录的待审修改通过 `laws_drafts` 表表示，editor 新建且尚未发布的主表记录本身也是待审核状态。
+
+### 响应字段说明
+
+Admin Law 响应**不再**包含 `filename` 或 `secure_name`，改为：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `object_name` | string\|null | 正式 OSS 对象 key |
+| `has_file` | boolean | 是否存在正式或待审文件 |
+| `has_draft` | boolean | 是否存在 LawDraft（待审核修改） |
+| `review_status` | string | `pending`（主表未发布或存在 LawDraft）或 `none` |
+| `has_pending_file` | boolean | 待审核修改是否包含文件 |
+| `pending_object_name` | string\|null | 根据待审标题和文件后缀计算的目标 OSS 名称 |
+
+> **绝不**返回 `pending_file_name` 或本地绝对路径。
 
 ### Draft 机制
 
 | 操作 | 行为 |
 |------|------|
-| editor CREATE | INSERT laws (status='draft')，无 draft 行 |
-| editor UPDATE 已发布 | laws 行不变（public 可见旧数据），INSERT/UPDATE `laws_drafts.data`（存完整行数据） |
+| editor CREATE | INSERT laws (status='draft')，文件写本地 tmp，不操作 OSS |
+| editor UPDATE 已发布 | laws 行不变（public 可见旧数据），INSERT/UPDATE `laws_drafts` + `pending_file_name` |
 | editor UPDATE 自己 draft | 直接 UPDATE laws 行 |
-| admin APPROVE | `laws_drafts.data` 覆盖 laws 行所有列 → DELETE draft 行 → status='published' |
-| admin 直接修改 | UPDATE laws，无 draft 行，status='published' |
+| admin 直接修改 published | UPDATE laws，直接操作 OSS（上传/复制/覆盖/删除） |
+| admin 修改 draft | 只更新主表和 `pending_file_name`，不发布，不操作 OSS |
+| admin APPROVE | 发布主表 draft，或合并 LawDraft 数据并上传待审文件 → published |
+| admin DISCARD draft | 删除 LawDraft + 临时文件，保留主版本 |
 
-> `admin` 创建/更新直接 `published`，`editor` 创建/更新自动 `draft`。
+> admin 创建时直接 `published`，修改已发布记录立即生效；修改主表 draft 不会隐式批准，仍需调用 approve。已有 pending LawDraft 的 published 法规会返回 409。editor 创建的记录和对 published 的修改均进入待审核状态。
 
 ---
 
 ### 12.1 法规列表
 
-**GET** `/api/admin/laws?page=1&per_page=20&status=draft`
+**GET** `/api/admin/laws?page=1&per_page=20&status=draft&review_status=pending`
 
-| 参数         | 类型     | 必填 | 说明                                     |
-|------------|--------|----|----------------------------------------|
-| `page`     | int    | 否  | 页码，默认 1                                |
-| `per_page` | int    | 否  | 每页条数，默认 20                             |
-| `status`     | string | 否  | `draft` / `published` / 不传返回全部          |
-| `country_id` | string | 否  | 按国家筛选，如 `ZA` |
-| `scene_id`   | string | 否  | 按场景筛选，如 `customs` |
-| `keyword`    | string | 否  | 按中英文标题模糊搜索 |
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `page` | int | 否 | 页码，默认 1 |
+| `per_page` | int | 否 | 每页条数，默认 20 |
+| `status` | string | 否 | `draft` / `published` / 不传返回全部 |
+| `review_status` | string | 否 | `pending`（主表未发布或存在 LawDraft）/ `none` |
+| `country_id` | string | 否 | 按国家筛选，如 `ZA` |
+| `scene_id` | string | 否 | 按场景筛选，如 `customs` |
+| `keyword` | string | 否 | 按中英文标题或法号模糊搜索 |
 
 ```bash
 curl -H 'Authorization: Bearer {token}' \
-  'http://localhost:6768/api/admin/laws?status=draft&country_id=ZA&scene_id=customs'
+  'http://localhost:6768/api/admin/laws?status=draft&review_status=pending'
 ```
 
 **响应：**
@@ -1300,18 +1320,20 @@ curl -H 'Authorization: Bearer {token}' \
                 "scene_id": "customs",
                 "effective_date": null,
                 "summary": null,
-                "filename": "南非海关法.pdf",
-                "has_file": true,
                 "status": "draft",
+                "object_name": null,
+                "has_file": true,
+                "has_draft": false,
+                "review_status": "pending",
+                "has_pending_file": true,
+                "pending_object_name": "待审法规.pdf",
                 "created_at": "2026-05-17T12:00:00",
                 "updated_at": "2026-05-17T12:00:00"
             }
         ],
         "meta": {
-            "page": 1,
-            "per_page": 20,
-            "total": 1,
-            "countries": [{"id": "ZA", "name": "南非"}],
+            "page": 1, "per_page": 20, "total": 1,
+            "countries": [{"id": "ZA", "name_zh": "南非"}],
             "scenes": [{"id": "customs", "label_zh": "海关进出口"}]
         }
     },
@@ -1345,9 +1367,13 @@ curl -H 'Authorization: Bearer {token}' \
             "scene_id": "customs",
             "effective_date": "2024-01-15",
             "summary": "制造业进口原材料需提前30天备案...",
-            "filename": "南非海关法.pdf",
-            "has_file": true,
             "status": "published",
+            "object_name": "《南非海关管理法》.pdf",
+            "has_file": true,
+            "has_draft": true,
+            "review_status": "pending",
+            "has_pending_file": false,
+            "pending_object_name": null,
             "created_at": "2026-05-17T12:00:00",
             "updated_at": "2026-05-17T12:00:00"
         }
@@ -1362,7 +1388,7 @@ curl -H 'Authorization: Bearer {token}' \
 
 **POST** `/api/admin/laws`
 
-Content-Type: **`multipart/form-data`**（非 JSON）
+Content-Type: **`multipart/form-data`**
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -1373,25 +1399,21 @@ Content-Type: **`multipart/form-data`**（非 JSON）
 | `scene_id` | string | 是 | 场景代码，如 `customs` |
 | `effective_date` | string | 否 | 生效日期 (YYYY-MM-DD) |
 | `summary` | string | 否 | 法规摘要 |
-| `file` | file | 否 | 法规文件（PDF/Word 等） |
+| `file` | file | 否 | 法规文件 |
 
 **处理逻辑：**
-1. 从 `request.form` 提取文本字段，`request.files` 提取文件
-2. 若提供了 `file`：提取原始扩展名，生成 `{uuid}.{ext}` 格式文件名，保存至 `{UPLOAD_PATH}/laws/`
-3. 创建 Law 记录，`secure_name` 存储生成的文件名，`filename` 存储原始文件名
-4. 若用户非 admin，`status` 自动设为 `draft`
+- **admin + 无文件**：直接创建 published、`object_name=NULL`。
+- **admin + 有文件**：上传至法律 OSS Bucket，创建 published 带 `object_name`。同名对象返回 409。
+- **editor**：创建 `status=draft`，文件写本地 `tmp/laws/` 作为 `pending_file_name`，不操作 OSS。
 
 ```bash
 # admin 创建（含文件）
 curl -X POST http://localhost:6768/api/admin/laws \
   -H 'Authorization: Bearer {admin_token}' \
-  -F 'title_cn=南非海关管理法' \
+  -F 'title_cn=《南非海关管理法》' \
   -F 'title_en=South Africa Customs Act' \
-  -F 'law_number=Act No. 91 of 2004' \
   -F 'country_id=ZA' \
   -F 'scene_id=customs' \
-  -F 'effective_date=2024-01-15' \
-  -F 'summary=制造业进口原材料需提前30天备案' \
   -F 'file=@/path/to/document.pdf'
 ```
 
@@ -1403,16 +1425,17 @@ curl -X POST http://localhost:6768/api/admin/laws \
     "data": {
         "item": {
             "id": 13,
-            "title_cn": "南非海关管理法",
+            "title_cn": "《南非海关管理法》",
             "title_en": "South Africa Customs Act",
-            "law_number": "Act No. 91 of 2004",
             "country_id": "ZA",
             "scene_id": "customs",
-            "effective_date": "2024-01-15",
-            "summary": "制造业进口原材料需提前30天备案",
-            "filename": "南非海关法.pdf",
-            "has_file": true,
             "status": "published",
+            "object_name": "《南非海关管理法》-South Africa Customs Act.pdf",
+            "has_file": true,
+            "has_draft": false,
+            "review_status": "none",
+            "has_pending_file": false,
+            "pending_object_name": null,
             "created_at": "2026-05-17T12:00:00",
             "updated_at": "2026-05-17T12:00:00"
         }
@@ -1427,7 +1450,7 @@ curl -X POST http://localhost:6768/api/admin/laws \
 
 **PUT** `/api/admin/laws/{id}`
 
-Content-Type: **`multipart/form-data`**（非 JSON）
+Content-Type: **`multipart/form-data`**
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -1438,28 +1461,24 @@ Content-Type: **`multipart/form-data`**（非 JSON）
 | `scene_id` | string | 否 | 场景代码 |
 | `effective_date` | string | 否 | 生效日期 |
 | `summary` | string | 否 | 法规摘要 |
-| `file` | file | 否 | 替换文件（若提供则删除旧文件并保存新文件） |
+| `file` | file | 否 | 替换文件 |
 
 **处理逻辑：**
-1. 查找已有 Law 记录
-2. 若提供了 `file`：
-   - 删除旧文件：`os.remove({UPLOAD_PATH}/laws/{旧secure_name})`（如旧文件存在）
-   - 保存新文件，生成新 UUID 文件名，更新 `secure_name` 和 `filename`
-3. 更新其他字段
-4. 若用户非 admin，`status` 自动设为 `draft`
+- **admin 修改 published（无 pending draft）**：直接更新主表和 OSS（同名覆盖、跨 key 替换、纯名称 copy+delete）。
+- **admin 修改 published（已存在 LawDraft）**：返回 409，要求先审核或丢弃草稿。
+- **admin 修改 draft**：只更新主表和 `pending_file_name`，不发布。
+- **editor 修改 published**：写入 LawDraft 表 + `pending_file_name`；主表和 OSS 保持不变。
+- **editor 修改自己 draft**：直接更新 Law 行。
 
 ```bash
+curl -X PUT http://localhost:6768/api/admin/laws/1 \
+  -H 'Authorization: Bearer {admin_token}' \
+  -F 'title_cn=修改后的标题'
+
 # 替换文件
 curl -X PUT http://localhost:6768/api/admin/laws/1 \
   -H 'Authorization: Bearer {admin_token}' \
-  -F 'title_cn=修改后的标题' \
   -F 'file=@/path/to/new_document.pdf'
-
-# 仅修改文本字段（不替换文件）
-curl -X PUT http://localhost:6768/api/admin/laws/1 \
-  -H 'Authorization: Bearer {admin_token}' \
-  -F 'title_cn=修改后的标题' \
-  -F 'effective_date=2025-01-01'
 ```
 
 **响应（200）：**
@@ -1471,7 +1490,7 @@ curl -X PUT http://localhost:6768/api/admin/laws/1 \
         "item": {
             "id": 1,
             "title_cn": "修改后的标题",
-            "filename": "新法规文件.pdf",
+            "object_name": "修改后的标题.pdf",
             "has_file": true,
             "status": "published",
             "updated_at": "2026-07-15T10:30:00"
@@ -1481,46 +1500,42 @@ curl -X PUT http://localhost:6768/api/admin/laws/1 \
 }
 ```
 
+**409 Conflict（存在待审草稿）：**
+
+```json
+{
+    "success": false,
+    "error": {
+        "code": "CONFLICT",
+        "message": "法规有待审核修改，请先审核或丢弃草稿"
+    }
+}
+```
+
 ---
 
-### 12.5 删除法规（含文件清理）
+### 12.5 删除法规（含 OSS 清理）
 
 **DELETE** `/api/admin/laws/{id}`
 
-admin 可删除任意记录，editor 仅可删除 `draft` 状态的记录。
+admin 可删除任意记录，editor 仅可删除 `draft`。
 
 **处理逻辑：**
-1. 查找 Law 记录，非 admin 且 status ≠ draft 则返回 403
-2. 若 `secure_name` 非空：删除本地文件 `{UPLOAD_PATH}/laws/{secure_name}`（删除失败不阻塞，仅记录日志）
-3. 删除数据库记录
+- **draft**：删除 DB 记录 + 本地临时文件。
+- **published**：下载 OSS 对象到本地作为回滚副本，删除 OSS 对象，删除 DB。OSS 删除失败时数据库不删除。
 
 ```bash
-# admin 删除
 curl -X DELETE http://localhost:6768/api/admin/laws/1 \
   -H 'Authorization: Bearer {admin_token}'
-
-# editor 删除自己的草稿
-curl -X DELETE http://localhost:6768/api/admin/laws/13 \
-  -H 'Authorization: Bearer {editor_token}'
 ```
 
-**响应（200）：**
-
-```json
-{ "success": true, "data": null, "message": "删除成功" }
-```
-
-**权限不足（403）：**
-
-```json
-{ "success": false, "error": { "code": "AUTH_ERROR", "message": "权限不足" } }
-```
+**响应（200）：** `{ "success": true, "data": null, "message": "删除成功" }`
 
 ---
 
 ### 12.6 审核通过（仅 admin）
 
-读取 `laws_drafts.data` 覆盖 laws 行所有列 → DELETE draft 行 → status='published'。
+对于 editor 新建的主表 draft，上传其待审文件并直接发布；对于已发布法规的 LawDraft，合并待审数据、切换 OSS 对象并删除 LawDraft。
 
 **POST** `/api/admin/laws/{id}/approve`
 
@@ -1535,7 +1550,7 @@ curl -X POST http://localhost:6768/api/admin/laws/13/approve \
 {
     "success": true,
     "data": {
-        "item": { "id": 13, "status": "published" }
+        "item": { "id": 13, "status": "published", "object_name": "法规名称.pdf" }
     },
     "message": "审核通过"
 }
@@ -1547,7 +1562,7 @@ curl -X POST http://localhost:6768/api/admin/laws/13/approve \
 
 **POST** `/api/admin/laws/approve-batch`
 
-单事务，全部成功或全部 rollback。事务提交后统一清理旧文件。
+逐条独立事务，一项失败不回滚已成功的其他项。
 
 ```bash
 curl -X POST http://localhost:6768/api/admin/laws/approve-batch \
@@ -1561,7 +1576,10 @@ curl -X POST http://localhost:6768/api/admin/laws/approve-batch \
 ```json
 {
     "success": true,
-    "data": {"approved": [1, 3, 7]},
+    "data": {
+        "approved": [1, 3],
+        "failed": [{"id": 7, "code": "VALIDATION_ERROR", "message": "该法规没有待审核修改"}]
+    },
     "message": "批量审核完成"
 }
 ```
@@ -1570,9 +1588,9 @@ curl -X POST http://localhost:6768/api/admin/laws/approve-batch \
 
 ### 12.8 挂起（仅 admin）
 
-**POST** `/api/admin/laws/{id}/suspend`
+将已发布法规调回 `draft`，丢弃 LawDraft，下载 OSS 对象至 tmp 并删除 OSS 对象。
 
-将已发布记录调回 `draft` 状态，同时清除关联的 draft 行。
+**POST** `/api/admin/laws/{id}/suspend`
 
 ```bash
 curl -X POST http://localhost:6768/api/admin/laws/13/suspend \
@@ -1585,13 +1603,40 @@ curl -X POST http://localhost:6768/api/admin/laws/13/suspend \
 {
     "success": true,
     "data": {
-        "item": { "id": 13, "status": "draft" }
+        "item": { "id": 13, "status": "draft", "object_name": null }
     },
     "message": "已挂起"
 }
 ```
 
 ---
+
+### 12.9 丢弃草稿（仅 admin）
+
+**DELETE** `/api/admin/laws/{id}/draft`
+
+删除 pending LawDraft 及其临时文件，保留线上主版本不变。
+
+```bash
+curl -X DELETE http://localhost:6768/api/admin/laws/1/draft \
+  -H 'Authorization: Bearer {admin_token}'
+```
+
+**响应：**
+
+```json
+{
+    "success": true,
+    "data": {
+        "item": { "id": 1, "status": "published", "has_draft": false }
+    },
+    "message": "草稿已丢弃"
+}
+```
+
+| 错误码 | HTTP | 说明 |
+|------|------|------|
+| `VALIDATION_ERROR` | 400 | 该法规没有待审核修改 |
 
 ## 13. 用户管理（仅 admin）
 

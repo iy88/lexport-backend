@@ -52,11 +52,17 @@
 | `scene_id`       | VARCHAR(20)  | FK → compliance_scenes.id, NOT NULL | 适用场景    |
 | `effective_date` | DATE         |                                     | 生效/修订日期 |
 | `summary`        | TEXT         |                                     | 法规要点摘要  |
-| `filename`       | VARCHAR(500) |                                     | 原始文件名  |
-| `secure_name`    | VARCHAR(500) |                                     | 存储文件名（UUID.ext） |
+| `object_name`    | VARCHAR(500) | UNIQUE, NULLABLE                    | 正式 OSS 对象名 (key) |
+| `pending_file_name` | VARCHAR(500) |                                  | 待审核本地临时文件名（仅 draft 或 pending 时有值） |
 | `status`         | ENUM('draft','published') | NOT NULL, DEFAULT 'published'       | 发布状态    |
 | `created_at`     | DATETIME     | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间    |
 | `updated_at`     | DATETIME     | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间    |
+
+> **变更说明**（相对于旧版 schema）：
+> - 删除了 `filename` 列。
+> - `secure_name` 重命名为 `pending_file_name`，含义变更为「待审核临时文件名」。
+> - 新增 `object_name`，存储正式发布至 OSS 法律知识库 Bucket 的对象 key。
+> - `object_name` 有 UNIQUE 约束；NULL 可重复（无文件法规）。
 
 ### laws_drafts
 
@@ -64,7 +70,8 @@
 |------|------|------|------|
 | `id` | BIGINT | PK, AUTO_INCREMENT | 主键 |
 | `law_id` | BIGINT | UNIQUE, FK → laws.id ON DELETE CASCADE | 关联法规 |
-| `data` | JSON | NOT NULL | 完整行数据（待审批） |
+| `data` | JSON | NOT NULL | 待审业务字段（不含 `filename`/`secure_name`/`object_name`/临时路径） |
+| `pending_file_name` | VARCHAR(500) | | 待审核文件本地临时文件名（UUID.ext） |
 | `editor_id` | BIGINT | FK → users.id | 编辑者 |
 | `created_at` | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | `updated_at` | DATETIME | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
@@ -106,6 +113,16 @@
 >   ADD COLUMN `deleted` tinyint(1) NOT NULL DEFAULT 0 AFTER `param`,
 >   ADD KEY `deleted` (`deleted`);
 > ```
+>
+> **Law OSS 迁移**：法律原件从本地迁移至 OSS 需分步执行，详见 `sql/migrations/`：
+> 1. 停止后端，备份数据库和 `uploads/laws/`。
+> 2. 运行 `check-dangling.py`（legacy 模式）确保无悬垂/丢失文件。
+> 3. 执行 `sql/migrations/001_expand.sql`。
+> 4. 运行 `bits/migrate-laws.py preflight`，修复问题。
+> 5. 运行 `bits/migrate-laws.py apply --batch-size 50`。
+> 6. 运行 `bits/migrate-laws.py verify`。
+> 7. 执行 `sql/migrations/002_contract.sql`，部署新代码。
+> 8. （可选）`bits/migrate-laws.py cleanup-local` 删除已迁移的本地源文件。
 
 ---
 

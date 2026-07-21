@@ -176,8 +176,9 @@ def create_report(user, form, files):
         # --- upload to OSS ---
         for _, secure_name in doc_meta:
             local_path = os.path.join(current_app.config['UPLOAD_PATH'], 'tmp', secure_name)
-            ok = upload_file(local_path, secure_name)
-            if not ok:
+            try:
+                upload_file(local_path, secure_name)
+            except AppError:
                 # Clean up ALL local tmp files on any OSS failure
                 _cleanup_tmp_files(tmp_paths)
                 raise AppError('OSS_UPLOAD_FAILED', '文件上传至 OSS 失败，请稍后重试', 502)
@@ -283,8 +284,13 @@ def serialize_report_metadata(record):
     if not isinstance(documents, list):
         documents = []
 
+    query_input = None
+    if record.param and isinstance(record.param, dict):
+        query_input = record.param.get('input')
+
     return {
         'id': record.id,
+        'query': query_input,
         'company_name': biz_params.get('company_name'),
         'industry': biz_params.get('industry'),
         'country': record.country,

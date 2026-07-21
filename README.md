@@ -86,7 +86,8 @@ python run.py           # 默认监听 0.0.0.0:6768
 
 ### Alibaba Cloud OSS
 
-> 用于合规报告附件上传，需要 RAM 用户具有 OSS 读写权限。
+> 合规报告附件使用 `OSS_BUCKET_NAME`，法律原件使用独立的 `LAW_OSS_BUCKET_NAME` 知识库 Bucket。
+> 需要 RAM 用户具有 OSS 读写权限。
 
 | 变量名                                | 必填 | 默认值                                           | 说明               |
 |-------------------------------------|----|-----------------------------------------------|------------------|
@@ -94,7 +95,8 @@ python run.py           # 默认监听 0.0.0.0:6768
 | `ALIBABA_CLOUD_ACCESS_KEY_SECRET`   | 是  | (空)                                           | RAM 用户 Secret    |
 | `OSS_REGION`                        | 否  | `cn-beijing`                                  | OSS 地域           |
 | `OSS_ENDPOINT`                      | 否  | `https://oss-cn-beijing.aliyuncs.com`         | OSS Endpoint     |
-| `OSS_BUCKET_NAME`                   | 是  | (空)                                           | Bucket 名称        |
+| `OSS_BUCKET_NAME`                   | 是  | (空)                                           | 合规报告附件 Bucket   |
+| `LAW_OSS_BUCKET_NAME`               | 是  | (空)                                           | 法律知识库 Bucket     |
 | `OSS_SIGN_URL_EXPIRES`              | 否  | `7200`                                        | 签名 URL 有效期（秒）    |
 
 ### 百炼 (Bailian) AI 平台

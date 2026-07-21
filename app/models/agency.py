@@ -1,4 +1,4 @@
-from app.extensions import db
+from app.extensions import bigint_pk_type, db
 
 
 class AgencyCategory(db.Model):
@@ -22,7 +22,7 @@ class AgencyScene(db.Model):
 class Agency(db.Model):
     __tablename__ = 'agencies'
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(bigint_pk_type(), primary_key=True, autoincrement=True)
     name = db.Column(db.String(200), nullable=False)
     scene_id = db.Column(db.String(30), db.ForeignKey('agency_scenes.id'), nullable=False)
     region = db.Column(db.String(300))
