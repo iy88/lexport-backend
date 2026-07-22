@@ -170,15 +170,35 @@ celery -A celery_app:celery_app beat --loglevel=INFO
 
 #### 开发环境 — 单终端后台运行
 
-```bash
-# Worker 后台运行，日志写入文件
-celery -A celery_app:celery_app worker --loglevel=INFO --logfile=./logs/worker.log --pidfile=./logs/worker.pid --detach
+先激活项目的 Python/Conda 环境，然后在仓库根目录运行：
 
-# Beat 后台运行
-celery -A celery_app:celery_app beat --loglevel=INFO --logfile=./logs/beat.log --pidfile=./logs/beat.pid --detach
+```bash
+# 同时启动一个 Worker 和一个 Beat
+./start-celery.sh
+
+# 停止 Beat 和 Worker
+./stop-celery.sh
 ```
 
-> 首次运行前确保 `./logs/` 目录存在：`mkdir -p logs`
+启动脚本可重复执行，不会重复启动已有进程。它会自动创建 `logs/`，并将 PID、日志及 Beat schedule 写入该目录。默认 Worker 并发数为 1，可按需覆盖：
+
+```bash
+CELERY_WORKER_CONCURRENCY=2 CELERY_LOG_LEVEL=WARNING ./start-celery.sh
+```
+
+如需指定解释器（例如未激活 Conda 环境），使用：
+
+```bash
+PYTHON_BIN=/path/to/conda/env/bin/python ./start-celery.sh
+```
+
+对应的手动排障命令为：
+
+```bash
+python -m celery -A celery_app:celery_app worker --loglevel=INFO --logfile=./logs/worker.log --pidfile=./logs/worker.pid --detach
+
+python -m celery -A celery_app:celery_app beat --loglevel=INFO --logfile=./logs/beat.log --pidfile=./logs/beat.pid --schedule=./logs/celerybeat-schedule --detach
+```
 
 #### 生产环境 — Supervisor
 
@@ -218,11 +238,12 @@ stopsignal=TERM
 | 场景 | 命令 |
 |------|------|
 | 前台运行 | `Ctrl+C`（等待正在执行的任务完成，约 2-5 秒） |
-| 后台运行（detach） | `kill -TERM $(cat ./logs/worker.pid)` |
-| 强制立即终止 | `kill -KILL $(cat ./logs/worker.pid)` |
+| 脚本后台运行 | `./stop-celery.sh` |
+| 延长优雅停止等待时间 | `CELERY_STOP_TIMEOUT=60 ./stop-celery.sh` |
+| 手动停止 | `kill -TERM $(cat ./logs/beat.pid) $(cat ./logs/worker.pid)` |
 | Supervisor | `supervisorctl stop lexport-worker lexport-beat` |
 
-> `--pidfile` 指定的文件记录了进程 PID，停止时直接读取即可。Worker 收到 `TERM` 信号后会等待当前任务完成再退出（默认 `stopwaitsecs` 内完成）。
+> 停止脚本先停止 Beat，避免关停期间继续投递任务，再向 Worker 发送 `TERM`。它默认等待 30 秒，不会自动发送 `KILL`；超时后会返回失败并保留进程，以免中断正在执行的任务。
 
 ### Celery 常用管理命令
 
@@ -252,7 +273,7 @@ celery -A celery_app:celery_app worker --loglevel=INFO -E
 | Worker 启动报 `ModuleNotFoundError` | 未在项目根目录启动 | `cd` 到 `lexport-backend/` 后再执行 celery 命令 |
 | 任务一直 `in_progress` | 百炼未返回终态 | 超过 2 小时自动标记 `failed`（由 `REPORT_TASK_TIMEOUT_SECONDS` 控制） |
 | Redis 连接失败 | Redis 未启动或 URL 错误 | 检查 `REDIS_URL` 配置，确认 `redis-server` 正在运行 |
-| Beat 报 `beat_schedule_pidfile` 冲突 | 已有 Beat 进程运行 | `kill $(cat ./logs/beat.pid)` 或删除 pid 文件 |
+| Beat 报 PID 或 schedule 冲突 | 已有 Beat 进程运行或文件残留 | 先运行 `./stop-celery.sh`；确认无 Beat 进程后再清理 `logs/beat.pid` |
 
 ## 项目结构
 
@@ -260,6 +281,8 @@ celery -A celery_app:celery_app worker --loglevel=INFO -E
 run.py                    # 入口
 config.py                 # 配置类 (Dev / Prod / Test + CeleryConfig)，从环境变量读取
 celery_app.py             # Celery 应用定义 + Beat 调度配置
+start-celery.sh           # 后台启动 Celery Worker 和单实例 Beat
+stop-celery.sh            # 按 PID 优雅停止 Beat 和 Worker
 app/
   __init__.py             # create_app() 工厂函数，组装应用
   extensions.py           # SQLAlchemy、Mail 等扩展实例
