@@ -30,3 +30,7 @@ class Law(db.Model):
         onupdate=db.func.current_timestamp(),
         nullable=False,
     )
+
+    __table_args__ = (
+        db.Index('idx_laws_status_created', 'status', 'created_at'),
+    )

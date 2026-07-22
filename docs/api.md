@@ -2,6 +2,10 @@
 
 ## 响应格式
 
+后台写接口会依据数据库模型验证字符串类型和最大长度，并在写入前去除首尾空格。
+日期、枚举、整数及引用 ID 同样在服务层验证；不合法值统一返回
+`400 VALIDATION_ERROR`，不会依赖 MySQL 截断或返回数据库异常。
+
 所有接口统一返回 JSON，格式如下：
 
 **成功响应：**
@@ -38,7 +42,7 @@
 |------------|--------|----|---------------------|
 | `username` | string | 是  | 用户名，3-50 位字母、数字或下划线 |
 | `password` | string | 是  | 密码，不少于 8 位，需包含字母和数字 |
-| `email`    | string | 否  | 邮箱地址                |
+| `email`    | string | 是  | 邮箱地址，最长 255 字符；注册后需验证 |
 
 ### 响应状态
 
@@ -52,6 +56,10 @@
 | 400      | `VALIDATION_ERROR` | 请输入正确的邮箱格式          | 邮箱格式不合法          |
 | 409      | `CONFLICT`         | 用户名已被注册             | 用户名重复            |
 | 409      | `CONFLICT`         | 邮箱已被注册              | 邮箱重复             |
+| 429      | `RATE_LIMITED`     | 请求过于频繁              | 同一 IP 每小时最多注册 5 次 |
+
+注册会先提交用户，再同步尝试发送验证邮件。SMTP 失败不会回滚账号；此时响应中的
+`verification_email_sent` 为 `false`，前端应提示用户稍后重发。
 
 ### 请求示例
 
@@ -75,7 +83,8 @@ curl -X POST http://localhost:5000/api/auth/register \
             "role": "user",
             "created_at": "2026-05-17T12:00:00"
         },
-        "access_token": "eyJhbGciOiJIUzI1NiIs..."
+        "access_token": "eyJhbGciOiJIUzI1NiIs...",
+        "verification_email_sent": true
     },
     "message": "注册成功"
 }
@@ -239,6 +248,18 @@ curl -X GET http://localhost:5000/api/user/profile \
     "message": "成功"
 }
 ```
+
+### 4.1 修改邮箱
+
+**PUT** `/api/user/email`，需要 access token。请求体为
+`{"email":"new@example.com","password":"当前密码"}`。成功后新邮箱立即写入，
+`email_verified` 重置为 `false`，并尝试发送新验证邮件；旧邮箱验证令牌随即失效。
+
+### 4.2 重发验证邮件
+
+**POST** `/api/user/email/resend-verification`，需要 access token，无请求体。
+修改邮箱与重发验证邮件共享每用户每小时 5 次限流；超限返回
+`429 RATE_LIMITED`。已验证邮箱重发返回 `409 CONFLICT`。
 
 ---
 
@@ -1712,7 +1733,8 @@ curl -X PUT http://localhost:5000/api/admin/users/2 \
 
 **POST** `/api/compliance-reports`
 
-需要携带 JWT access token。Content-Type: `multipart/form-data`。
+需要携带 JWT access token、规范小写 UUID 格式的 `Idempotency-Key` 请求头。
+只有邮箱已验证的用户可创建；Content-Type 为 `multipart/form-data`。
 
 #### 请求参数
 
@@ -1727,14 +1749,19 @@ curl -X PUT http://localhost:5000/api/admin/users/2 \
 | `budget_range`  | string | 是  | 预算区间          |
 | `documents`     | file   | 否  | 附件（可多选，最多 5 个） |
 
-**文件限制**：单个文件 ≤ 20MB，支持 PDF、DOC、DOCX、TXT、HTML。
+**文件限制**：单个文件 ≤ 20MB，支持 PDF、DOC、DOCX、TXT、HTML。后端同时校验
+扩展名与文件签名/结构，伪装扩展名会在任何 OSS 或百炼调用前被拒绝。
 
 #### 响应状态
 
 | HTTP 状态码 | 错误码                | 消息                | 说明               |
 |----------|--------------------|--------------------|------------------|
 | 202      | -                  | 报告生成任务已创建        | 创建成功，后台生成中      |
+| 200      | -                  | 返回已有报告任务          | 相同幂等键重放且任务已进入终态 |
 | 400      | `VALIDATION_ERROR` | 缺少必填字段 / 不支持的文件类型 | 参数或文件不合法        |
+| 403      | `EMAIL_VERIFICATION_REQUIRED` | 请先验证邮箱 | 邮箱尚未验证 |
+| 409      | `IDEMPOTENCY_CONFLICT` | 幂等键已用于其他请求 | 同一用户、同一键但请求指纹不同 |
+| 429      | `RATE_LIMITED` | 请求过于频繁 | 普通用户每分钟最多创建 5 次 |
 | 413      | `FILE_TOO_LARGE`   | 上传文件总大小超过限制       | 请求体超过 105MB      |
 | 401      | `AUTH_ERROR`       | 缺少认证令牌            | 未登录或 token 无效   |
 | 502      | `OSS_UPLOAD_FAILED` | 文件上传至 OSS 失败      | OSS 不可用          |
@@ -1746,6 +1773,7 @@ curl -X PUT http://localhost:5000/api/admin/users/2 \
 ```bash
 curl -X POST http://localhost:5000/api/compliance-reports \
   -H 'Authorization: Bearer <token>' \
+  -H 'Idempotency-Key: 70b7ed6a-5a29-4e12-a3ec-276a68bc75b8' \
   -F 'query=我公司计划在南非设立制造工厂，请分析合规要求' \
   -F 'company_name=示例制造有限公司' \
   -F 'industry=家电制造' \
@@ -1763,6 +1791,7 @@ curl -X POST http://localhost:5000/api/compliance-reports \
     "success": true,
     "data": {
         "id": 1,
+        "idempotency_key": "70b7ed6a-5a29-4e12-a3ec-276a68bc75b8",
         "task_id": "resp_abc123def456",
         "status": "in_progress",
         "company_name": "示例制造有限公司",
@@ -1778,6 +1807,11 @@ curl -X POST http://localhost:5000/api/compliance-reports \
     "message": "报告生成任务已创建"
 }
 ```
+
+任务先以 `submitting` 状态预留数据库记录，再上传附件并创建百炼任务；成功后进入
+`in_progress`。同一用户用相同幂等键和完全相同的字段、文件内容重试时，不会重复
+上传或创建任务：活动任务返回 202，终态任务返回 200。提交阶段失败会把预留记录
+标记为 `failed`，并尽力清理本次已上传的 OSS 对象。
 
 ### 14.2 报告列表
 

@@ -40,3 +40,7 @@ class Agency(db.Model):
         onupdate=db.func.current_timestamp(),
         nullable=False,
     )
+
+    __table_args__ = (
+        db.Index('idx_agencies_status_sort', 'status', 'sort_order'),
+    )

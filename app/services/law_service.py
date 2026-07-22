@@ -1,15 +1,23 @@
+from datetime import date
 import os
 import unicodedata
 import uuid
 
 from flask import current_app
 from sqlalchemy import or_
+from sqlalchemy.exc import DataError, IntegrityError, StatementError
 
 from app.extensions import db
 from app.models.country import Country
 from app.models.draft import LawDraft
 from app.models.law import ComplianceScene, Law
-from app.utils.errors import AppError, ConflictError, NotFoundError, ValidationError
+from app.utils.errors import (
+    AppError,
+    AuthenticationError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 from app.utils.oss_utils import (
     copy_object,
     delete_object,
@@ -18,6 +26,7 @@ from app.utils.oss_utils import (
     object_exists,
     upload_file,
 )
+from app.utils.validators import normalize_model_strings
 
 
 # ---------------------------------------------------------------------------
@@ -334,6 +343,64 @@ LAW_FORM_FIELDS = [
 ]
 
 
+def _validate_law_data(data, partial=False):
+    """Normalize and validate Law business fields before DB or OSS work."""
+    if not isinstance(data, dict):
+        raise ValidationError('法规数据必须为对象')
+    unknown = set(data) - set(LAW_FORM_FIELDS)
+    if unknown:
+        raise ValidationError(f'不支持的字段: {", ".join(sorted(unknown))}')
+
+    values = normalize_model_strings(
+        Law,
+        {key: value for key, value in data.items() if key in LAW_FORM_FIELDS},
+        required=('title_cn', 'country_id', 'scene_id'),
+    )
+    if not partial:
+        for field in ('title_cn', 'country_id', 'scene_id'):
+            if values.get(field) in (None, ''):
+                raise ValidationError(f'{field} 不能为空')
+
+    if 'effective_date' in values:
+        value = values['effective_date']
+        if value in (None, ''):
+            values['effective_date'] = None
+        elif isinstance(value, date):
+            values['effective_date'] = value
+        elif isinstance(value, str):
+            try:
+                values['effective_date'] = date.fromisoformat(value.strip())
+            except ValueError as exc:
+                raise ValidationError(
+                    'effective_date 必须为有效的 YYYY-MM-DD 日期',
+                ) from exc
+        else:
+            raise ValidationError('effective_date 必须为 YYYY-MM-DD')
+
+    if 'country_id' in values and not db.session.get(
+            Country, values['country_id']):
+        raise ValidationError('country_id 不存在')
+    if 'scene_id' in values and not db.session.get(
+            ComplianceScene, values['scene_id']):
+        raise ValidationError('scene_id 不存在')
+    return values
+
+
+def _law_json_values(values):
+    return {
+        key: value.isoformat() if isinstance(value, date) else value
+        for key, value in values.items()
+    }
+
+
+def _convert_law_write_error(exc):
+    """Convert user-caused persistence failures while preserving OSS cleanup."""
+    if isinstance(exc, IntegrityError):
+        raise ValidationError('法规数据引用无效或与现有记录冲突') from exc
+    if isinstance(exc, (DataError, StatementError)):
+        raise ValidationError('法规字段类型或长度不合法') from exc
+
+
 def _parse_law_form(form):
     """Extract law text fields from a dict-like *form* (request.form or JSON)."""
     data = {}
@@ -372,6 +439,11 @@ def list_laws(page=1, per_page=20, status=None, review_status=None, filters=None
     - *review_status* filters presence of a LawDraft row:
       ``pending`` → has draft, ``none`` → no draft.
     """
+    if status not in (None, 'draft', 'published'):
+        raise ValidationError('status 必须为 draft 或 published')
+    if review_status not in (None, 'pending', 'none'):
+        raise ValidationError('review_status 必须为 pending 或 none')
+
     query = Law.query
 
     if status:
@@ -391,17 +463,10 @@ def list_laws(page=1, per_page=20, status=None, review_status=None, filters=None
                 Law.title_en.contains(keyword),
                 Law.law_number.contains(keyword),
             ))
-        for field, value in filters.items():
-            if field == 'keyword':
-                continue
-            if not hasattr(Law, field) or value is None:
-                continue
-            attr = getattr(Law, field)
-            col_type = attr.property.columns[0].type
-            if isinstance(col_type, db.String):
-                query = query.filter(attr.contains(value))
-            else:
-                query = query.filter(attr == value)
+        if filters.get('country_id'):
+            query = query.filter(Law.country_id == filters['country_id'])
+        if filters.get('scene_id'):
+            query = query.filter(Law.scene_id == filters['scene_id'])
 
     query = query.order_by(Law.id.desc())
     total = query.count()
@@ -443,9 +508,10 @@ def create_law(data, file_storage, user):
     - **admin with file**    → upload to OSS, published with object_name.
     - **editor**             → draft; file goes to tmp as pending_file_name.
     """
+    if user.role not in ('admin', 'editor'):
+        raise AuthenticationError('权限不足', http_status=403)
+    data = _validate_law_data(data, partial=False)
     is_admin = user.role == 'admin'
-    if not (data.get('title_cn') or '').strip():
-        raise ValidationError('中文标题不能为空')
     status = 'published' if is_admin else 'draft'
     pending_file_name = None
     object_name = None
@@ -469,11 +535,11 @@ def create_law(data, file_storage, user):
                 uploaded_to_oss = True
 
         law = Law(
-            title_cn=data.get('title_cn', '').strip(),
-            title_en=(data.get('title_en') or '').strip() or None,
-            law_number=(data.get('law_number') or '').strip() or None,
-            country_id=data.get('country_id', '').strip(),
-            scene_id=data.get('scene_id', '').strip(),
+            title_cn=data['title_cn'],
+            title_en=data.get('title_en') or None,
+            law_number=data.get('law_number') or None,
+            country_id=data['country_id'],
+            scene_id=data['scene_id'],
             effective_date=data.get('effective_date') or None,
             summary=data.get('summary') or None,
             object_name=object_name if is_admin else None,
@@ -485,7 +551,7 @@ def create_law(data, file_storage, user):
         committed = True
         return {'item': _serialize_law(law)}
 
-    except Exception:
+    except Exception as exc:
         db.session.rollback()
         # Rollback OSS: delete uploaded object when DB commit fails.
         if uploaded_to_oss and not committed and object_name:
@@ -498,6 +564,7 @@ def create_law(data, file_storage, user):
                     delete_object(object_name, bucket_name='LAW_OSS_BUCKET_NAME')
             except Exception:
                 pass
+        _convert_law_write_error(exc)
         raise
     finally:
         # Admin uploads are transient.  Editor uploads must remain available for
@@ -515,8 +582,9 @@ def update_law(law_id, data, file_storage, user):
 
     See docs/law-oss-plan.md §3 for the full decision matrix.
     """
-    if 'title_cn' in data and not (data.get('title_cn') or '').strip():
-        raise ValidationError('中文标题不能为空')
+    if user.role not in ('admin', 'editor'):
+        raise AuthenticationError('权限不足', http_status=403)
+    data = _validate_law_data(data, partial=True)
     is_admin = user.role == 'admin'
     law = _lock_law(law_id)
     existing_draft = LawDraft.query.filter_by(law_id=law_id).first()
@@ -538,9 +606,10 @@ def _admin_update_published(law, data, file_storage):
     """Admin updating a published law directly."""
     has_file_change = bool(file_storage and file_storage.filename)
     has_name_change = (
-        data.get('title_cn') and data['title_cn'] != law.title_cn
+        'title_cn' in data and data['title_cn'] != law.title_cn
     ) or (
-        data.get('title_en') is not None and data['title_en'] != (law.title_en or '')
+        'title_en' in data and
+        (data.get('title_en') or '') != (law.title_en or '')
     )
 
     new_object_name = None
@@ -594,9 +663,10 @@ def _admin_update_published(law, data, file_storage):
         transition = None
         return {'item': _serialize_law(law)}
 
-    except Exception:
+    except Exception as exc:
         db.session.rollback()
         _compensate_oss_transition(transition)
+        _convert_law_write_error(exc)
         raise
     finally:
         if tmp_path:
@@ -620,10 +690,11 @@ def _admin_update_draft(law, data, file_storage):
         if new_pending and old_pending:
             _remove_tmp_file(old_pending)
         return {'item': _serialize_law(law)}
-    except Exception:
+    except Exception as exc:
         db.session.rollback()
         if new_pending:
             _remove_tmp_file(new_pending)
+        _convert_law_write_error(exc)
         raise
 
 
@@ -640,7 +711,9 @@ def _editor_update_published(law, data, file_storage, user):
         'effective_date': law.effective_date.isoformat() if law.effective_date else None,
         'summary': law.summary,
     }
-    full.update({k: v for k, v in data.items() if k in LAW_FORM_FIELDS})
+    full.update(_law_json_values({
+        k: v for k, v in data.items() if k in LAW_FORM_FIELDS
+    }))
 
     if not draft:
         draft = LawDraft(law_id=law.id, data=full, editor_id=user.id)
@@ -660,10 +733,11 @@ def _editor_update_published(law, data, file_storage, user):
         if new_pending and old_pending:
             _remove_tmp_file(old_pending)
         return {'item': _serialize_law(law, draft)}
-    except Exception:
+    except Exception as exc:
         db.session.rollback()
         if new_pending:
             _remove_tmp_file(new_pending)
+        _convert_law_write_error(exc)
         raise
 
 
@@ -684,10 +758,11 @@ def _editor_update_draft(law, data, file_storage):
         if new_pending and old_pending:
             _remove_tmp_file(old_pending)
         return {'item': _serialize_law(law)}
-    except Exception:
+    except Exception as exc:
         db.session.rollback()
         if new_pending:
             _remove_tmp_file(new_pending)
+        _convert_law_write_error(exc)
         raise
 
 
@@ -703,6 +778,21 @@ def approve_law(law_id):
     if not draft and law.status != 'draft':
         raise AppError('VALIDATION_ERROR', '该法规没有待审核修改', 400)
 
+    target_data = {
+        'title_cn': law.title_cn,
+        'title_en': law.title_en,
+        'law_number': law.law_number,
+        'country_id': law.country_id,
+        'scene_id': law.scene_id,
+        'effective_date': law.effective_date,
+        'summary': law.summary,
+    }
+    if draft and draft.data:
+        if not isinstance(draft.data, dict):
+            raise ValidationError('法规草稿数据格式无效')
+        target_data.update(draft.data)
+    target_values = _validate_law_data(target_data, partial=False)
+
     new_object_name = None
     old_object_name = law.object_name
     pending_tmp = draft.pending_file_name if draft else law.pending_file_name
@@ -712,14 +802,13 @@ def approve_law(law_id):
         # Compute target object name if there's a pending file or name change.
         if pending_tmp:
             ext = os.path.splitext(pending_tmp)[1]
-            proposed = draft.data if draft and draft.data else {}
-            cn = proposed.get('title_cn', law.title_cn)
-            en = proposed.get('title_en', law.title_en or '')
+            cn = target_values['title_cn']
+            en = target_values.get('title_en') or ''
             new_object_name = _build_object_name(cn, en, ext)
         elif draft and draft.data:
             # Possible name-only change with existing OSS object.
-            cn_draft = draft.data.get('title_cn', law.title_cn)
-            en_draft = draft.data.get('title_en', law.title_en or '')
+            cn_draft = target_values['title_cn']
+            en_draft = target_values.get('title_en') or ''
             if cn_draft != law.title_cn or en_draft != (law.title_en or ''):
                 if old_object_name:
                     ext = os.path.splitext(old_object_name)[1]
@@ -745,10 +834,8 @@ def approve_law(law_id):
             )
 
         # --- DB update ---
-        if draft and draft.data:
-            for key, value in draft.data.items():
-                if key in LAW_FORM_FIELDS and hasattr(law, key):
-                    setattr(law, key, value)
+        for key, value in target_values.items():
+            setattr(law, key, value)
         if new_object_name:
             law.object_name = new_object_name
         law.pending_file_name = None
@@ -765,9 +852,10 @@ def approve_law(law_id):
 
         return {'item': _serialize_law(law)}
 
-    except Exception:
+    except Exception as exc:
         db.session.rollback()
         _compensate_oss_transition(transition)
+        _convert_law_write_error(exc)
         raise
     finally:
         _cleanup_oss_transition(transition)

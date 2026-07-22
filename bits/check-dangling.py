@@ -31,7 +31,7 @@ from app.extensions import db
 from app.models.draft import LawDraft
 from app.models.law import Law
 
-app = create_app(initialize_database=False)
+app = create_app()
 
 
 def _resolve_upload_path(subdir=''):

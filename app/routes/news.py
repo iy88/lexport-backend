@@ -8,14 +8,23 @@ news_bp = Blueprint('news', __name__)
 
 @news_bp.route('', methods=['GET'])
 def get_news():
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
+    page = max(1, request.args.get('page', 1, type=int) or 1)
+    per_page = min(100, max(1, request.args.get('per_page', 20, type=int) or 20))
     news_type = request.args.get('type')
     country_id = request.args.get('country_id')
     keyword = request.args.get('keyword')
     date_from = request.args.get('date_from')
     date_to = request.args.get('date_to')
-    tag_id = request.args.get('tag_id', type=int)
+    raw_tag_id = request.args.get('tag_id')
+    if raw_tag_id is not None:
+        try:
+            tag_id = int(raw_tag_id)
+        except (TypeError, ValueError) as exc:
+            raise AppError('VALIDATION_ERROR', 'tag_id 必须为整数', 400) from exc
+        if tag_id <= 0:
+            raise AppError('VALIDATION_ERROR', 'tag_id 必须为正整数', 400)
+    else:
+        tag_id = None
 
     result = news_service.get_news(
         page=page,

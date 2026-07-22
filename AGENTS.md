@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-`run.py` starts the Flask application; `config.py` defines development, production, and in-memory testing configurations. Application code lives under `app/`: models map SQLAlchemy tables, routes expose resource-specific Blueprints, services contain business logic, and utils provide JWT, validation, authorization, and error helpers. Register new Blueprints in `app/routes/__init__.py`. Keep API and schema documentation in `docs/`. `bits/` contains one-off data utilities, while `sql/` and `uploads/` contain local data artifacts and are ignored by Git.
+`run.py` starts the Flask application; `config.py` defines development, production, and in-memory testing configurations. Application code lives under `app/`: models map SQLAlchemy tables, routes expose resource-specific Blueprints, services contain business logic, and utils provide JWT, validation, authorization, and error helpers. Register new Blueprints in `app/routes/__init__.py`. Keep API and schema documentation in `docs/`. `bits/` contains data utilities; versioned migrations live in `sql/migrations/`, while uploads and database dumps stay untracked.
 
 ## Setup, Run, and Verification Commands
 
@@ -11,7 +11,7 @@ Use Python 3.12 and an isolated environment:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 cp .env.example .env
 python run.py
 ```
@@ -24,7 +24,7 @@ Follow PEP 8 with four-space indentation. Use `snake_case` for modules, function
 
 ## Testing Guidelines
 
-The app factory provides `TestingConfig` with an in-memory SQLite database, but no tests are currently committed. Add pytest tests under `tests/`, named `test_<feature>.py`, and use `create_app('testing')` in fixtures. Install pytest as a development dependency, then run `python -m pytest tests/ -v`; for coverage, use `python -m pytest --cov=app tests/`. Cover service behavior, authorization boundaries, validation failures, and response schemas.
+The app factory provides `TestingConfig` with an in-memory SQLite database. Add pytest tests under `tests/`, named `test_<feature>.py`, and reuse fixtures from `tests/conftest.py`. Run `python -m pytest tests/ -v`; for coverage, install pytest-cov and use `python -m pytest --cov=app tests/`. Cover service behavior, authorization boundaries, validation failures, and response schemas. Never make real SMTP, OSS, Redis, or AI calls in tests.
 
 ## Commit & Pull Request Guidelines
 

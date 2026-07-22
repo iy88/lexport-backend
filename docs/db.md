@@ -89,6 +89,8 @@
 | `task_id`        | VARCHAR(100) | UNIQUE, INDEX                   | 报告生成任务 ID |
 | `status`         | VARCHAR(30)  | INDEX                           | 任务状态 |
 | `param`          | JSON         | NOT NULL                        | 报告生成参数及创建时的 AI 版本、数据截止日期快照 |
+| `idempotency_key` | VARCHAR(64) | NULL，和 `user_id` 组成唯一约束 | 客户端请求幂等键 |
+| `request_fingerprint` | CHAR(64) | NULL | 表单字段及附件内容的 SHA-256 请求指纹 |
 | `deleted`        | BOOLEAN      | NOT NULL, DEFAULT FALSE, INDEX  | 软删除标记 |
 | `created_at`     | DATETIME    | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 生成时间 |
 
@@ -101,18 +103,16 @@
 | `created_at` | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | `updated_at` | DATETIME | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
 
-> **迁移说明**：现有数据库需手动执行 ALTER TABLE 添加索引和约束，不可依赖 `db.create_all()` 修改旧表：
+> **迁移说明**：应用启动不会执行 DDL。旧版诊断表和下述查询索引/外键统一通过
+> `bits/migrate-mvp-production-fixes.py` 迁移，不可依赖 `db.create_all()` 修改旧表：
 > ```sql
-> ALTER TABLE diagnosis_records
->   ADD UNIQUE KEY `task_id` (`task_id`),
->   ADD KEY `status` (`status`),
->   MODIFY `param` json NOT NULL;
-> ALTER TABLE diagnosis_results
->   MODIFY `result` json NOT NULL;
-> ALTER TABLE diagnosis_records
->   ADD COLUMN `deleted` tinyint(1) NOT NULL DEFAULT 0 AFTER `param`,
->   ADD KEY `deleted` (`deleted`);
+> python bits/migrate-mvp-production-fixes.py preflight
+> python bits/migrate-mvp-production-fixes.py apply
+> python bits/migrate-mvp-production-fixes.py verify
 > ```
+> `preflight` 和 `verify` 检查列类型、可空性、复合索引顺序、外键目标及
+> `ON DELETE CASCADE`，发现 drift 返回非零退出码。停写并备份后执行；手工一次性
+> SQL 等价物为 `sql/migrations/003_mvp_production_fixes.sql`。
 >
 > **Law OSS 迁移**：法律原件从本地迁移至 OSS 需分步执行，详见 `sql/migrations/`：
 > 1. 停止后端，备份数据库和 `uploads/laws/`。
@@ -172,7 +172,7 @@
 
 | 字段        | 类型     | 约束                    | 说明 |
 |-----------|--------|-----------------------|----|
-| `news_id` | BIGINT | PK, FK → news.id      | 新闻 |
+| `news_id` | BIGINT | PK, FK → news.id ON DELETE CASCADE | 新闻 |
 | `tag_id`  | BIGINT | PK, FK → news_tags.id | 标签 |
 
 ---

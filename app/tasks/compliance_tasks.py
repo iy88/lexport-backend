@@ -12,7 +12,7 @@ from app.utils.report_utils import InvalidReportError, apply_report_metadata
 from celery_app import celery_app
 
 # Non-terminal statuses that should be polled
-ACTIVE_STATUSES = ['queued', 'in_progress']
+ACTIVE_STATUSES = ['submitting', 'queued', 'in_progress']
 
 
 @celery_app.task(name='app.tasks.compliance_tasks.poll_reports')
@@ -47,8 +47,10 @@ def poll_reports():
             return
 
         timeout_seconds = int(os.environ.get('REPORT_TASK_TIMEOUT_SECONDS', 7200))
+        submitting_timeout = 300  # 5 min for records stuck without task_id
         cutoff = datetime.now() - timedelta(seconds=timeout_seconds)
-        client = _get_bailian_client(timeout=30, max_retries=0)
+        submitting_cutoff = datetime.now() - timedelta(seconds=submitting_timeout)
+        client = None
 
         for record in records:
             # Keep the lock alive while processing a potentially large batch.
@@ -60,11 +62,19 @@ def poll_reports():
             if created.tzinfo is not None:
                 created = created.astimezone().replace(tzinfo=None)
 
+            # Submitting records with no task_id: fail after 5 min.
+            if record.status == 'submitting' and not record.task_id:
+                if created < submitting_cutoff:
+                    _mark_status(record, 'failed')
+                continue
+
             if created < cutoff:
                 _mark_status(record, 'failed')
                 continue
 
             try:
+                if client is None:
+                    client = _get_bailian_client(timeout=30, max_retries=0)
                 response = client.responses.retrieve(record.task_id)
                 status = response.status
 

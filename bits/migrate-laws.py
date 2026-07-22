@@ -43,7 +43,7 @@ from app.utils.oss_utils import (
     upload_file,
 )
 
-app = create_app(initialize_database=False)
+app = create_app()
 
 BUCKET = 'LAW_OSS_BUCKET_NAME'
 

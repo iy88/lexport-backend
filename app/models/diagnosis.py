@@ -13,6 +13,8 @@ class DiagnosisRecord(db.Model):
     task_id = db.Column(db.String(100), unique=True, index=True, nullable=True)
     status = db.Column(db.String(30), index=True)
     param = db.Column(db.JSON, nullable=False)
+    idempotency_key = db.Column(db.String(64), nullable=True)
+    request_fingerprint = db.Column(db.CHAR(64), nullable=True)
     deleted = db.Column(
         db.Boolean,
         nullable=False,
@@ -21,6 +23,11 @@ class DiagnosisRecord(db.Model):
         index=True,
     )
     created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'idempotency_key', name='uq_diagnosis_user_idempotency'),
+        db.Index('idx_diagnosis_user_deleted_created', 'user_id', 'deleted', 'created_at'),
+    )
 
 
 class DiagnosisResult(db.Model):

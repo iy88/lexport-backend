@@ -11,7 +11,7 @@ from app.models.user import User
 @pytest.fixture
 def app(tmp_path):
     """Create a test Flask app with in-memory SQLite."""
-    a = create_app('testing', initialize_database=False)
+    a = create_app('testing')
     a.config['UPLOAD_PATH'] = str(tmp_path / 'uploads')
     with a.app_context():
         _db.create_all()

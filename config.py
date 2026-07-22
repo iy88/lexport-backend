@@ -1,5 +1,7 @@
 import os
 
+from sqlalchemy.engine.url import URL
+
 
 class BaseConfig:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret')
@@ -8,17 +10,27 @@ class BaseConfig:
     JWT_VERIFY_TOKEN_EXPIRES = int(os.environ.get('JWT_VERIFY_TOKEN_EXPIRES', 1800))
 
     _DB_HOST = os.environ.get('DB_HOST', '127.0.0.1')
-    _DB_PORT = os.environ.get('DB_PORT', '3306')
+    _DB_PORT = int(os.environ.get('DB_PORT', '3306'))
     _DB_NAME = os.environ.get('DB_NAME', 'lexport')
     _DB_USER = os.environ.get('DB_USER', 'root')
     _DB_PASSWORD = os.environ.get('DB_PASSWORD', '')
 
-    SQLALCHEMY_DATABASE_URI = (
-        f'mysql+pymysql://{_DB_USER}:{_DB_PASSWORD}@'
-        f'{_DB_HOST}:{_DB_PORT}/{_DB_NAME}'
+    SQLALCHEMY_DATABASE_URI = URL.create(
+        'mysql+pymysql',
+        username=_DB_USER,
+        password=_DB_PASSWORD,
+        host=_DB_HOST,
+        port=_DB_PORT,
+        database=_DB_NAME,
+        query={'charset': 'utf8mb4'},
     )
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': True,
+        'pool_recycle': 1800,
+        'pool_timeout': 10,
+    }
 
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.example.com')
     MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
@@ -53,6 +65,7 @@ class BaseConfig:
 
     # Redis / Celery
     REDIS_URL = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0')
+    RATELIMIT_STORAGE_URI = REDIS_URL
     REPORT_POLL_INTERVAL_SECONDS = int(os.environ.get('REPORT_POLL_INTERVAL_SECONDS', 10))
     REPORT_TASK_TIMEOUT_SECONDS = int(os.environ.get('REPORT_TASK_TIMEOUT_SECONDS', 7200))
 
@@ -79,3 +92,5 @@ class ProductionConfig(BaseConfig):
 class TestingConfig(BaseConfig):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    SQLALCHEMY_ENGINE_OPTIONS = {}  # MySQL pool options are incompatible with SQLite
+    RATELIMIT_STORAGE_URI = 'memory://'

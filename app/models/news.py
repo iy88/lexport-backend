@@ -27,6 +27,10 @@ class News(db.Model):
         nullable=False,
     )
 
+    __table_args__ = (
+        db.Index('idx_news_status_date', 'status', 'date'),
+    )
+
 
 class NewsTag(db.Model):
     __tablename__ = 'news_tags'
@@ -38,5 +42,5 @@ class NewsTag(db.Model):
 class NewsTagRelation(db.Model):
     __tablename__ = 'news_tag_relations'
 
-    news_id = db.Column(db.BigInteger, db.ForeignKey('news.id'), primary_key=True)
+    news_id = db.Column(db.BigInteger, db.ForeignKey('news.id', ondelete='CASCADE'), primary_key=True)
     tag_id = db.Column(db.BigInteger, db.ForeignKey('news_tags.id'), primary_key=True)

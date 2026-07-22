@@ -26,14 +26,14 @@ git clone <repo-url> && cd lexport-backend
 # 2. 创建虚拟环境
 python -m venv .venv && source .venv/bin/activate
 
-# 3. 安装依赖
-pip install -r requirements.txt
+# 3. 安装依赖（开发/测试环境使用 requirements-dev.txt）
+pip install -r requirements-dev.txt
 
 # 4. 配置环境变量
 cp .env.example .env   # 编辑 .env 填入各项配置（详见下方配置说明）
 
-# 5. 初始化数据库（首次运行自动建表）
-python run.py           # 默认监听 0.0.0.0:6768
+# 5. 先按 sql/migrations/ 与 docs/db.md 准备数据库，再启动服务
+python run.py           # 默认监听 0.0.0.0:6768；启动不会自动建表或改 schema
 ```
 
 ## 环境变量配置
@@ -152,6 +152,8 @@ python run.py
 ```
 
 > 原理：`app/utils/celery_runner.py` 使用独立进程组启动 Celery，启动后检查子进程是否立即退出；Flask 退出时按进程组发送 TERM，超时后发送 KILL。
+> `FLASK_ENV=production` 会拒绝 `CELERY_AUTO_START=true`；生产环境请使用下方
+> Supervisor（或等价进程管理器）分别管理 API、Worker 和 Beat。
 
 #### 开发环境 — 多终端
 
@@ -331,22 +333,25 @@ JWT payload 中包含 `type` 字段，防止 token 类型混淆。
 
 - 单一 `login_id` 字段同时接受用户名和邮箱（通过是否含 `@` 判断）
 - 认证失败时统一返回「用户名或密码错误」，不区分具体原因
-- 邮箱可选，未提供邮箱的用户只能通过用户名登录
+- 注册必须提供邮箱；邮箱验证前可登录，但不能创建合规报告
+- 绑定/更换邮箱和重发验证邮件共享每用户 `5/hour` 限流
 
 ### 合规报告异步流程
 
 ```
-POST /api/compliance-reports (表单 + 可选文件)
+POST /api/compliance-reports (Idempotency-Key + 表单 + 可选文件)
   │
+  ├─ 验证邮箱、字段、文件签名/大小并计算请求指纹
+  ├─ 提交 DiagnosisRecord (status=submitting) 幂等 reservation
   ├─ 文件保存到本地 tmp → 逐一上传 OSS → 生成签名 URL
   ├─ 查询匹配机构 (Agency.region.contains)
   ├─ 调用百炼 responses.create(background=True) → 获得 task_id
-  └─ 写入 DiagnosisRecord (status=in_progress) → 返回 202
+  └─ 更新 DiagnosisRecord (status=queued/in_progress/终态) → 返回 202
 
 Celery Beat (每 10s)
   └─ poll_reports task
        ├─ Redis 所有权锁（防重复）
-       ├─ 扫描 in_progress 记录
+       ├─ 扫描 submitting/queued/in_progress 记录
        ├─ 调用百炼 responses.retrieve(task_id)
        ├─ completed → 写入 DiagnosisResult (同一事务)
        ├─ failed/cancelled → 标记失败
@@ -366,6 +371,8 @@ DELETE /api/compliance-reports/{id}
 若 `output_text` 不是合法 JSON，或缺少前端 schema 要求的四个报告元数据字段，
 记录会标记为 `failed`，且不会创建结果记录。
 软删除后的报告不会出现在普通用户列表和详情中，但管理员仍可查看记录及其结果。
+同一用户重放相同 `Idempotency-Key` 和相同请求时不会再次调用 OSS/百炼；若请求
+指纹不同则返回 409。上传后发生失败会尽力删除已上传的临时 OSS 对象。
 
 ## API 文档
 

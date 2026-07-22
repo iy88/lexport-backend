@@ -1,8 +1,9 @@
-import threading
+import logging
 
 import jwt as pyjwt
 from flask import current_app
 from flask_mail import Message
+from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db, mail
 from app.models.user import User
@@ -10,8 +11,15 @@ from app.utils.errors import ValidationError, AuthenticationError, ConflictError
 from app.utils.jwt_utils import generate_access_token, generate_verification_token, decode_token
 from app.utils.validators import validate_username, validate_password, validate_email
 
+logger = logging.getLogger(__name__)
 
-def register(username, password, email=None):
+
+def register(username, password, email):
+    """Register a new user. Email is mandatory."""
+    if not isinstance(username, str) or not isinstance(password, str) or not isinstance(email, str):
+        raise ValidationError('用户名、密码和邮箱必须是字符串')
+
+    username = username.strip()
     is_valid, err = validate_username(username)
     if not is_valid:
         raise ValidationError(err)
@@ -20,6 +28,10 @@ def register(username, password, email=None):
     if not is_valid:
         raise ValidationError(err)
 
+    if not email.strip():
+        raise ValidationError('邮箱为必填项')
+
+    email = email.strip()
     is_valid, err = validate_email(email)
     if not is_valid:
         raise ValidationError(err)
@@ -27,29 +39,67 @@ def register(username, password, email=None):
     if User.query.filter_by(username=username).first():
         raise ConflictError('用户名已被注册')
 
-    if email and User.query.filter_by(email=email).first():
+    if User.query.filter_by(email=email).first():
         raise ConflictError('邮箱已被注册')
 
-    user = User(username=username, email=email if email else None)
+    user = User(username=username, email=email)
     user.set_password(password)
 
     db.session.add(user)
-    db.session.commit()
-
-    if email:
-        app = current_app._get_current_object()
-        uid, uemail, uname = user.id, user.email, user.username
-        threading.Thread(target=_send_verification_email, args=(app, uid, uemail, uname), daemon=True).start()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        # Pre-checks improve the common response path, but the database
+        # constraint is authoritative under concurrent registrations.
+        if User.query.filter_by(username=username).first():
+            raise ConflictError('用户名已被注册')
+        if User.query.filter_by(email=email).first():
+            raise ConflictError('邮箱已被注册')
+        logger.exception('Registration violated an unexpected integrity constraint')
+        raise ConflictError('用户名或邮箱已被注册')
 
     access_token = generate_access_token(user.id, user.role)
+    verification_sent = _try_send_verification(user)
 
     return {
         'user': user.to_dict(),
         'access_token': access_token,
+        'verification_email_sent': verification_sent,
     }
 
 
+def _try_send_verification(user):
+    """Send a verification email synchronously. Returns True on success."""
+    if not user.email:
+        return False
+    try:
+        token = generate_verification_token(user.id, user.email)
+        verify_url = f"{current_app.config['FRONTEND_URL']}/verify-email/{token}"
+        html = _render_verification_html(user.username, verify_url)
+        plain = (
+            f'您好 {user.username}，\n\n'
+            f'请点击以下链接验证您的邮箱地址：\n{verify_url}\n\n'
+            f'此链接将在30分钟内有效。\n\n律航出海'
+        )
+        msg = Message(
+            subject='验证您的邮箱 - 律航出海',
+            recipients=[user.email],
+            body=plain,
+            html=html,
+        )
+        mail.send(msg)
+        return True
+    except Exception:
+        logger.exception('Failed to send verification email for user %s', user.id)
+        return False
+
+
 def login(login_id, password):
+    if not isinstance(login_id, str) or not isinstance(password, str):
+        raise ValidationError('登录账号和密码必须是字符串')
+
+    login_id = login_id.strip()
     if not login_id or not password:
         raise ValidationError('请填写登录账号和密码')
 
@@ -70,7 +120,7 @@ def login(login_id, password):
 
 
 def verify_email(token):
-    if not token:
+    if not isinstance(token, str) or not token:
         raise ValidationError('缺少验证令牌')
 
     try:
@@ -80,33 +130,43 @@ def verify_email(token):
     except pyjwt.InvalidTokenError:
         raise ValidationError('无效的验证令牌')
 
-    user_id = payload.get('sub')
+    raw_user_id = payload.get('sub')
     token_email = payload.get('email')
 
-    user = db.session.get(User, int(user_id))
+    if (
+        not isinstance(raw_user_id, str)
+        or not raw_user_id.isascii()
+        or not raw_user_id.isdecimal()
+        or raw_user_id.startswith('0')
+        or len(raw_user_id) > 19
+        or not isinstance(token_email, str)
+        or not token_email
+        or len(token_email) > 255
+    ):
+        raise ValidationError('无效的验证令牌')
+
+    user_id = int(raw_user_id)
+    if user_id <= 0 or user_id > 9_223_372_036_854_775_807:
+        raise ValidationError('无效的验证令牌')
+
+    # Serialize verification with change_email(). Without the row lock, an
+    # old token can verify a newly written email between comparison and commit.
+    user = (
+        User.query.filter_by(id=user_id)
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
     if not user:
+        db.session.rollback()
         raise NotFoundError('用户不存在')
 
     if user.email != token_email:
+        db.session.rollback()
         raise ValidationError('无效的验证令牌')
 
     user.email_verified = True
     db.session.commit()
-
-
-def _send_verification_email(app, user_id, user_email, username):
-    with app.app_context():
-        token = generate_verification_token(user_id, user_email)
-        verify_url = f"{app.config['FRONTEND_URL']}/verify-email/{token}"
-        html = _render_verification_html(username, verify_url)
-        plain = f'您好 {username}，\n\n请点击以下链接验证您的邮箱地址：\n{verify_url}\n\n此链接将在30分钟内有效。\n\n律航出海'
-        msg = Message(
-            subject='验证您的邮箱 - 律航出海',
-            recipients=[user_email],
-            body=plain,
-            html=html,
-        )
-        mail.send(msg)
 
 
 def _render_verification_html(username, verify_url):

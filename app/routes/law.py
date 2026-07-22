@@ -10,8 +10,8 @@ law_bp = Blueprint('law', __name__)
 
 @law_bp.route('', methods=['GET'])
 def get_laws():
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
+    page = max(1, request.args.get('page', 1, type=int) or 1)
+    per_page = min(100, max(1, request.args.get('per_page', 20, type=int) or 20))
     country_id = request.args.get('country_id')
     scene_id = request.args.get('scene_id')
     keyword = request.args.get('keyword')

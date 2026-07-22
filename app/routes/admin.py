@@ -32,21 +32,22 @@ EDITOR_RESTRICTED = set()
 # ===================== Agencies (content, generic) =====================
 
 @admin_bp.route('/agencies', methods=['GET'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def list_agencies():
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _pagination()
     status = request.args.get('status')
+    review_status = request.args.get('review_status')
     filters = {k: request.args.get(k) for k in [
         'scene_id', 'category_id', 'region', 'keyword',
     ] if request.args.get(k)}
     model, _, _ = CONTENT_MODELS['agencies']
-    result = admin_service.list_items(model, 'agencies', page, per_page, status, filters)
+    result = admin_service.list_items(model, 'agencies', page, per_page, status,
+                                      review_status=review_status, filters=filters)
     return jsonify({'success': True, 'data': result, 'message': '成功'}), 200
 
 
 @admin_bp.route('/agencies/<int:item_id>', methods=['GET'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def get_agency(item_id):
     model, draft_model, fk_field = CONTENT_MODELS['agencies']
     result = admin_service.get_item_with_draft(model, draft_model, item_id, fk_field)
@@ -54,25 +55,25 @@ def get_agency(item_id):
 
 
 @admin_bp.route('/agencies', methods=['POST'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def create_agency():
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     model, _, _ = CONTENT_MODELS['agencies']
     result = admin_service.create_item(model, data, g.current_user)
     return jsonify({'success': True, 'data': result, 'message': '创建成功'}), 201
 
 
 @admin_bp.route('/agencies/<int:item_id>', methods=['PUT'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def update_agency(item_id):
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     model, draft_model, fk_field = CONTENT_MODELS['agencies']
     result = admin_service.update_item_with_draft(model, draft_model, item_id, data, g.current_user, fk_field)
     return jsonify({'success': True, 'data': result, 'message': '更新成功'}), 200
 
 
 @admin_bp.route('/agencies/<int:item_id>', methods=['DELETE'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def delete_agency(item_id):
     model, _, _ = CONTENT_MODELS['agencies']
     item = db.session.get(model, item_id)
@@ -95,10 +96,13 @@ def approve_agency(item_id):
 @admin_bp.route('/agencies/approve-batch', methods=['POST'])
 @jwt_required(role='admin')
 def batch_approve_agency():
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     ids = data.get('ids', [])
     if not ids:
         raise AppError('VALIDATION_ERROR', 'ids 不能为空', 400)
+    if not isinstance(ids, list) or any(isinstance(i, bool) or not isinstance(i, int) for i in ids):
+        raise AppError('VALIDATION_ERROR', 'ids 必须为整数数组', 400)
+    ids = list(dict.fromkeys(ids))
     model, draft_model, fk_field = CONTENT_MODELS['agencies']
     result = admin_service.batch_approve_items(model, draft_model, ids, fk_field)
     return jsonify({'success': True, 'data': result, 'message': '批量审核完成'}), 200
@@ -112,81 +116,68 @@ def suspend_agency(item_id):
     return jsonify({'success': True, 'data': result, 'message': '已挂起'}), 200
 
 
+@admin_bp.route('/agencies/<int:item_id>/draft', methods=['DELETE'])
+@jwt_required(role='admin')
+def discard_agency_draft(item_id):
+    """Discard a pending AgencyDraft, keeping the published main version."""
+    model, draft_model, fk_field = CONTENT_MODELS['agencies']
+    item = db.session.get(model, item_id)
+    if not item:
+        raise NotFoundError('记录不存在')
+    draft = draft_model.query.filter_by(**{fk_field: item_id}).first()
+    if not draft:
+        raise AppError('VALIDATION_ERROR', '该机构没有待审核修改', 400)
+    db.session.delete(draft)
+    db.session.commit()
+    result = admin_service.get_item_with_draft(model, draft_model, item_id, fk_field)
+    return jsonify({'success': True, 'data': result, 'message': '草稿已丢弃'}), 200
+
+
 # ===================== News (dedicated, content + draft) =====================
 
 @admin_bp.route('/news', methods=['GET'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def list_news():
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _pagination()
     status = request.args.get('status')
-    tag_id = request.args.get('tag_id', type=int)
+    review_status = request.args.get('review_status')
+    tag_id = _optional_int_arg('tag_id')
     filters = {k: request.args.get(k) for k in [
         'type', 'country_id', 'date_from', 'date_to', 'keyword',
     ] if request.args.get(k)}
-    result = admin_service.list_items(News, 'news', page, per_page, status, filters,
-                                       tag_id=tag_id)
+    result = admin_service.list_items(News, 'news', page, per_page, status,
+                                      review_status=review_status, filters=filters,
+                                      tag_id=tag_id)
     return jsonify({'success': True, 'data': result, 'message': '成功'}), 200
 
 
 @admin_bp.route('/news/<int:item_id>', methods=['GET'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def get_news(item_id):
-    result = admin_service.get_item_with_draft(News, NewsDraft, item_id, 'news_id')
-    text = NewsText.query.get(item_id)
-    result['item']['content'] = text.content if text else None
+    result = _news_detail(item_id)
     return jsonify({'success': True, 'data': result, 'message': '成功'}), 200
 
 
 @admin_bp.route('/news', methods=['POST'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def create_news():
-    data = request.get_json(silent=True) or {}
-    tag_ids = data.pop('tag_ids', [])
-    content = data.pop('content', None)
-
-    result = admin_service.create_item(News, data, g.current_user)
-    item_id = result['item']['id']
-
-    if content:
-        db.session.add(NewsText(news_id=item_id, content=content))
-    for tid in tag_ids:
-        db.session.add(NewsTagRelation(news_id=item_id, tag_id=tid))
-    db.session.commit()
-
+    data = _json_body()
+    item_id = admin_service.create_news(data, g.current_user)
     return jsonify({'success': True, 'data': _news_detail(item_id), 'message': '创建成功'}), 201
 
 
 @admin_bp.route('/news/<int:item_id>', methods=['PUT'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def update_news(item_id):
-    data = request.get_json(silent=True) or {}
-    tag_ids = data.pop('tag_ids', None)
-    content = data.pop('content', None)
-
-    result = admin_service.update_item_with_draft(News, NewsDraft, item_id, data, g.current_user, 'news_id')
-
-    if content is not None:
-        text = NewsText.query.get(item_id)
-        if text:
-            text.content = content
-        else:
-            db.session.add(NewsText(news_id=item_id, content=content))
-        db.session.commit()
-
-    if tag_ids is not None:
-        NewsTagRelation.query.filter_by(news_id=item_id).delete()
-        for tid in tag_ids:
-            db.session.add(NewsTagRelation(news_id=item_id, tag_id=tid))
-        db.session.commit()
-
+    data = _json_body()
+    admin_service.update_news(item_id, data, g.current_user)
     return jsonify({'success': True, 'data': _news_detail(item_id), 'message': '更新成功'}), 200
 
 
 @admin_bp.route('/news/<int:item_id>', methods=['DELETE'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def delete_news(item_id):
-    item = News.query.get(item_id)
+    item = db.session.get(News, item_id)
     if not item:
         raise NotFoundError('记录不存在')
     if g.current_user.role != 'admin' and item.status != 'draft':
@@ -198,18 +189,35 @@ def delete_news(item_id):
 @admin_bp.route('/news/<int:item_id>/approve', methods=['POST'])
 @jwt_required(role='admin')
 def approve_news(item_id):
-    result = admin_service.approve_item(News, NewsDraft, item_id, 'news_id')
-    return jsonify({'success': True, 'data': result, 'message': '审核通过'}), 200
+    admin_service.approve_news(item_id)
+    return jsonify({'success': True, 'data': _news_detail(item_id), 'message': '审核通过'}), 200
+
+
+@admin_bp.route('/news/<int:item_id>/draft', methods=['DELETE'])
+@jwt_required(role='admin')
+def discard_news_draft(item_id):
+    """Discard a pending NewsDraft, keeping the published main version."""
+    item = db.session.get(News, item_id)
+    if not item:
+        raise NotFoundError('记录不存在')
+    draft = NewsDraft.query.filter_by(news_id=item_id).first()
+    if not draft:
+        raise AppError('VALIDATION_ERROR', '该资讯没有待审核修改', 400)
+    db.session.delete(draft)
+    db.session.commit()
+    return jsonify({'success': True, 'data': _news_detail(item_id), 'message': '草稿已丢弃'}), 200
 
 
 @admin_bp.route('/news/approve-batch', methods=['POST'])
 @jwt_required(role='admin')
 def batch_approve_news():
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     ids = data.get('ids', [])
     if not ids:
         raise AppError('VALIDATION_ERROR', 'ids 不能为空', 400)
-    result = admin_service.batch_approve_items(News, NewsDraft, ids, 'news_id')
+    if not isinstance(ids, list) or any(isinstance(i, bool) or not isinstance(i, int) for i in ids):
+        raise AppError('VALIDATION_ERROR', 'ids 必须为整数数组', 400)
+    result = admin_service.batch_approve_news(list(dict.fromkeys(ids)))
     return jsonify({'success': True, 'data': result, 'message': '批量审核完成'}), 200
 
 
@@ -221,20 +229,68 @@ def suspend_news(item_id):
 
 
 def _news_detail(item_id):
-    text = NewsText.query.get(item_id)
+    text = db.session.get(NewsText, item_id)
     item = admin_service.get_item_with_draft(News, NewsDraft, item_id, 'news_id')
-    item['item']['content'] = text.content if text else None
+
+    # Merge live content only if the draft preview did not supply it.
+    if 'content' not in item['item']:
+        item['item']['content'] = text.content if text else None
+
+    # Resolve tags from DB for current state, or from draft tag_ids for preview
+    draft = NewsDraft.query.filter_by(news_id=item_id).first()
+    if (draft and isinstance(draft.data, dict) and
+            draft.data.get('tag_ids') is not None):
+        draft_tag_ids = admin_service.validate_tag_ids(draft.data['tag_ids'])
+        if draft_tag_ids:
+            tags = NewsTag.query.filter(NewsTag.id.in_(draft_tag_ids)).all()
+            item['item']['tags'] = [{'id': t.id, 'name_zh': t.name_zh} for t in tags]
+        else:
+            item['item']['tags'] = []
+    else:
+        relations = NewsTagRelation.query.filter_by(news_id=item_id).all()
+        tag_ids = [r.tag_id for r in relations]
+        if tag_ids:
+            tags = NewsTag.query.filter(NewsTag.id.in_(tag_ids)).all()
+            item['item']['tags'] = [{'id': t.id, 'name_zh': t.name_zh} for t in tags]
+        else:
+            item['item']['tags'] = []
+
     return item
+
+
+def _pagination():
+    page = request.args.get('page', 1, type=int) or 1
+    per_page = request.args.get('per_page', 20, type=int) or 20
+    return max(1, page), min(100, max(1, per_page))
+
+
+def _json_body():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        raise AppError('VALIDATION_ERROR', '请求体必须为 JSON 对象', 400)
+    return data
+
+
+def _optional_int_arg(name):
+    raw = request.args.get(name)
+    if raw is None:
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise AppError('VALIDATION_ERROR', f'{name} 必须为整数', 400) from exc
+    if value <= 0:
+        raise AppError('VALIDATION_ERROR', f'{name} 必须为正整数', 400)
+    return value
 
 
 # ===================== Laws (dedicated, multipart + file + draft + OSS) =====================
 
 
 @admin_bp.route('/laws', methods=['GET'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def list_laws():
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _pagination()
     status = request.args.get('status')
     review_status = request.args.get('review_status')
     filters = {k: request.args.get(k) for k in [
@@ -248,14 +304,14 @@ def list_laws():
 
 
 @admin_bp.route('/laws/<int:item_id>', methods=['GET'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def get_law(item_id):
     result = law_service.get_law_with_draft(item_id)
     return jsonify({'success': True, 'data': result, 'message': '成功'}), 200
 
 
 @admin_bp.route('/laws', methods=['POST'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def create_law():
     data = _parse_law_form()
     uploaded = request.files.get('file')
@@ -264,7 +320,7 @@ def create_law():
 
 
 @admin_bp.route('/laws/<int:item_id>', methods=['PUT'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def update_law(item_id):
     data = _parse_law_form()
     uploaded = request.files.get('file')
@@ -276,9 +332,9 @@ def update_law(item_id):
 
 
 @admin_bp.route('/laws/<int:item_id>', methods=['DELETE'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def delete_law(item_id):
-    law = Law.query.get(item_id)
+    law = db.session.get(Law, item_id)
     if not law:
         raise NotFoundError('记录不存在')
     if g.current_user.role != 'admin' and law.status != 'draft':
@@ -303,11 +359,13 @@ def approve_law(item_id):
 @admin_bp.route('/laws/approve-batch', methods=['POST'])
 @jwt_required(role='admin')
 def batch_approve_law():
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     ids = data.get('ids', [])
-    if not ids:
-        raise AppError('VALIDATION_ERROR', 'ids 不能为空', 400)
-    result = law_service.batch_approve_laws(ids)
+    if (not isinstance(ids, list) or not ids or
+            any(isinstance(item_id, bool) or not isinstance(item_id, int)
+                for item_id in ids)):
+        raise AppError('VALIDATION_ERROR', 'ids 必须为非空整数数组', 400)
+    result = law_service.batch_approve_laws(list(dict.fromkeys(ids)))
     return jsonify({'success': True, 'data': result, 'message': '批量审核完成'}), 200
 
 
@@ -337,8 +395,7 @@ def _parse_law_form():
     if request.content_type and 'multipart' in request.content_type:
         form = request.form
     else:
-        body = request.get_json(silent=True) or {}
-        form = body
+        form = _json_body()
 
     fields = ['title_cn', 'title_en', 'law_number', 'country_id', 'scene_id',
               'effective_date', 'summary']
@@ -386,7 +443,7 @@ def delete_compliance_report(report_id):
 # ===================== Reference Tables (catch-all for admin CRUD) =====================
 
 @admin_bp.route('/<string:resource>', methods=['GET'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def list_ref(resource):
     if resource not in REF_MODELS:
         raise NotFoundError('资源不存在')
@@ -396,7 +453,7 @@ def list_ref(resource):
 
 
 @admin_bp.route('/<string:resource>/<string:item_id>', methods=['GET'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def get_ref(resource, item_id):
     if resource not in REF_MODELS:
         raise NotFoundError('资源不存在')
@@ -406,26 +463,26 @@ def get_ref(resource, item_id):
 
 
 @admin_bp.route('/<string:resource>', methods=['POST'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def create_ref(resource):
     if resource not in REF_MODELS:
         raise NotFoundError('资源不存在')
     if resource in EDITOR_RESTRICTED and g.current_user.role != 'admin':
         raise AppError('AUTH_ERROR', '权限不足', 403)
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     model = REF_MODELS[resource]
     result = admin_service.create_ref_item(model, data)
     return jsonify({'success': True, 'data': result, 'message': '创建成功'}), 201
 
 
 @admin_bp.route('/<string:resource>/<string:item_id>', methods=['PUT'])
-@jwt_required
+@jwt_required(roles=('admin', 'editor'))
 def update_ref(resource, item_id):
     if resource not in REF_MODELS:
         raise NotFoundError('资源不存在')
     if resource in EDITOR_RESTRICTED and g.current_user.role != 'admin':
         raise AppError('AUTH_ERROR', '权限不足', 403)
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     model = REF_MODELS[resource]
     result = admin_service.update_ref_item(model, item_id, data)
     return jsonify({'success': True, 'data': result, 'message': '更新成功'}), 200
@@ -446,8 +503,7 @@ def delete_ref(resource, item_id):
 @admin_bp.route('/users', methods=['GET'])
 @jwt_required(role='admin')
 def list_users():
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _pagination()
     query = User.query.order_by(User.id.desc())
     total = query.count()
     users = query.offset((page - 1) * per_page).limit(per_page).all()
@@ -472,7 +528,7 @@ def update_user(user_id):
             'success': False,
             'error': {'code': 'AUTH_ERROR', 'message': '不能修改管理员权限'},
         }), 403
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     if 'role' in data:
         if data['role'] not in ('user', 'admin', 'editor'):
             return jsonify({
