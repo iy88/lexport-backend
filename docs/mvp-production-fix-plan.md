@@ -104,7 +104,7 @@ The same invariants apply to News and Agency.
 - A Draft row must not affect public APIs before approval.
 - Editors share Draft rows: any editor can update the pending snapshot.
 - Only admin can approve, batch approve, suspend, or discard a Draft.
-- Admin direct update of a published item applies immediately unless a pending Draft exists; in that case return 409 and require approval/discard first, matching the Law behavior.
+- Admin direct update of a published item applies immediately when no pending Draft exists. When a Draft exists, admin and editors update the same shared pending snapshot; it remains pending and does not affect the live item until approval.
 
 ### 4.2 NewsDraft payload
 
@@ -495,7 +495,7 @@ Draft workflow:
 - forced commit failure rolls everything back;
 - discard preserves published content;
 - batch approval includes published rows with Draft;
-- admin direct edit conflicts with pending Draft.
+- admin and multiple editors can update the same pending Draft without a conflict; the live item remains unchanged until approval.
 
 Email:
 

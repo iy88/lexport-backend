@@ -198,27 +198,30 @@ def update_item_with_draft(model, DraftModel, item_id, data, user, fk_field):
     values = validate_agency_data(data, partial=True)
     draft = DraftModel.query.filter_by(**{fk_field: item_id}).first()
 
-    if user.role == 'admin':
-        if draft:
-            raise ConflictError('机构有待审核修改，请先审核或丢弃草稿')
+    if user.role not in ('admin', 'editor'):
+        raise AuthenticationError('权限不足', http_status=403)
+
+    if item.status == 'draft':
         for key, value in values.items():
             setattr(item, key, value)
-    elif user.role == 'editor':
-        if item.status == 'draft':
-            for key, value in values.items():
-                setattr(item, key, value)
-        else:
-            snapshot = _business_snapshot(item, 'agencies')
-            if draft and draft.data:
-                snapshot.update(_draft_payload('agencies', draft.data))
-            snapshot.update(_json_safe_values(values))
-            if draft:
-                draft.data = snapshot
-                draft.editor_id = user.id
-            else:
-                db.session.add(DraftModel(**{fk_field: item_id, 'data': snapshot, 'editor_id': user.id}))
+    elif draft:
+        snapshot = _business_snapshot(item, 'agencies')
+        if draft.data:
+            snapshot.update(_draft_payload('agencies', draft.data))
+        snapshot.update(_json_safe_values(values))
+        draft.data = snapshot
+        draft.editor_id = user.id
+    elif user.role == 'admin':
+        for key, value in values.items():
+            setattr(item, key, value)
     else:
-        raise AuthenticationError('权限不足', http_status=403)
+        snapshot = _business_snapshot(item, 'agencies')
+        snapshot.update(_json_safe_values(values))
+        db.session.add(DraftModel(**{
+            fk_field: item_id,
+            'data': snapshot,
+            'editor_id': user.id,
+        }))
 
     try:
         db.session.commit()
@@ -415,39 +418,46 @@ def update_news(item_id, data, user):
     values = validate_news_data(payload, partial=True)
     draft = NewsDraft.query.filter_by(news_id=item_id).first()
 
-    if user.role == 'admin':
-        if draft:
-            raise ConflictError('资讯有待审核修改，请先审核或丢弃草稿')
+    if user.role not in ('admin', 'editor'):
+        raise AuthenticationError('权限不足', http_status=403)
+
+    if item.status == 'draft':
         for key, value in values.items():
             setattr(item, key, value)
         if content_provided:
             _set_news_content(item_id, content)
         if tags_provided:
             _replace_news_tags(item_id, tag_ids)
-    elif user.role == 'editor':
-        if item.status == 'draft':
-            for key, value in values.items():
-                setattr(item, key, value)
-            if content_provided:
-                _set_news_content(item_id, content)
-            if tags_provided:
-                _replace_news_tags(item_id, tag_ids)
-        else:
-            snapshot = _news_snapshot(item)
-            if draft and draft.data:
-                snapshot.update(_draft_payload('news', draft.data))
-            snapshot.update(_json_safe_values(values))
-            if content_provided:
-                snapshot['content'] = content
-            if tags_provided:
-                snapshot['tag_ids'] = tag_ids
-            if draft:
-                draft.data = snapshot
-                draft.editor_id = user.id
-            else:
-                db.session.add(NewsDraft(news_id=item_id, data=snapshot, editor_id=user.id))
+    elif draft:
+        snapshot = _news_snapshot(item)
+        if draft.data:
+            snapshot.update(_draft_payload('news', draft.data))
+        snapshot.update(_json_safe_values(values))
+        if content_provided:
+            snapshot['content'] = content
+        if tags_provided:
+            snapshot['tag_ids'] = tag_ids
+        draft.data = snapshot
+        draft.editor_id = user.id
+    elif user.role == 'admin':
+        for key, value in values.items():
+            setattr(item, key, value)
+        if content_provided:
+            _set_news_content(item_id, content)
+        if tags_provided:
+            _replace_news_tags(item_id, tag_ids)
     else:
-        raise AuthenticationError('权限不足', http_status=403)
+        snapshot = _news_snapshot(item)
+        snapshot.update(_json_safe_values(values))
+        if content_provided:
+            snapshot['content'] = content
+        if tags_provided:
+            snapshot['tag_ids'] = tag_ids
+        db.session.add(NewsDraft(
+            news_id=item_id,
+            data=snapshot,
+            editor_id=user.id,
+        ))
 
     try:
         db.session.commit()

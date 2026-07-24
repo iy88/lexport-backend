@@ -613,7 +613,7 @@ curl http://localhost:5000/api/stats
 
 > **news** 和 **laws** 已拆分为独立路由，详见 [第 11 节](#11-资讯后台管理news支持正文编辑--draft) 和 [第 12 节](#12-法规后台管理laws支持文件上传--draft)。
 
-`admin` 创建/更新直接生效（`published`），`editor` 创建/更新自动进入待审核（`draft`）。
+`admin` 创建直接生效（`published`）；更新已发布且无待审 Draft 的记录也直接生效。若记录已有待审 Draft，`admin` 与 `editor` 均编辑同一份共享离线 Draft，修改后仍保持待审核，不影响线上版本。
 
 ---
 
@@ -722,6 +722,10 @@ curl -H 'Authorization: Bearer {token}' \
 
 Content-Type: `application/json`。
 
+- 主表为 `draft`：`admin` 与 `editor` 直接修改共享主表草稿，不会隐式批准。
+- 主表为 `published` 且已有 AgencyDraft：双方均修改同一份共享 Draft，线上主表保持不变。
+- 主表为 `published` 且无 AgencyDraft：`admin` 修改立即生效；`editor` 修改会创建待审 Draft。
+
 ```bash
 curl -X PUT http://localhost:6768/api/admin/agencies/6 \
   -H 'Authorization: Bearer {admin_token}' \
@@ -754,7 +758,7 @@ admin 可删除任意记录，editor 仅可删除 `draft` 状态的记录。
 curl -X DELETE http://localhost:6768/api/admin/agencies/69 \
   -H 'Authorization: Bearer {admin_token}'
 
-# editor 删除自己的草稿
+# editor 删除共享主表草稿
 curl -X DELETE http://localhost:6768/api/admin/agencies/70 \
   -H 'Authorization: Bearer {editor_token}'
 ```
@@ -958,11 +962,12 @@ news 接口独立于通用后台，**支持正文 content 字段的读写**。�
 |------|------|
 | editor CREATE | INSERT news (status='draft')，无 draft 行 |
 | editor UPDATE 已发布 | news 行不变（public 可见旧数据），INSERT/UPDATE `news_drafts.data`（存完整行数据） |
-| editor UPDATE 自己 draft | 直接 UPDATE news 行 |
+| admin/editor UPDATE 主表 draft | 直接 UPDATE news 行，保持待审核 |
 | admin APPROVE | `news_drafts.data` 覆盖 news 行所有列 → DELETE draft 行 → status='published' |
-| admin 直接修改 | UPDATE news，无 draft 行，status='published' |
+| admin UPDATE published（无 Draft） | UPDATE news，立即生效，status='published' |
+| admin/editor UPDATE published（有 Draft） | 更新同一份共享 `news_drafts.data`，保持待审核，线上版本不变 |
 
-> `admin` 创建/更新直接 `published`，`editor` 创建/更新自动 `draft`。
+> `admin` 创建直接 `published`，更新无 Draft 的 published 记录也立即生效。管理员编辑已有共享 Draft 不会自动发布，仍需显式 approve。
 
 ---
 
@@ -1140,6 +1145,8 @@ Content-Type: `application/json`
 | (所有 News 字段) | | 否 | 仅传需要修改的字段 |
 | `content` | string | 否 | **正文内容**（传入则 upsert `news_text` 行） |
 
+主表为 `draft` 时，管理员和 editor 修改共享主表草稿；published 记录已有 NewsDraft 时，双方均在当前待审快照上继续修改，线上正文、标签和元数据保持不变。仅当 published 记录不存在 Draft 时，管理员修改才立即生效。
+
 ```bash
 # 仅修改标题
 curl -X PUT http://localhost:6768/api/admin/news/4 \
@@ -1179,7 +1186,7 @@ admin 可删除任意记录，editor 仅可删除 `draft` 状态的记录。CASC
 curl -X DELETE http://localhost:6768/api/admin/news/13 \
   -H 'Authorization: Bearer {admin_token}'
 
-# editor 删除自己的草稿
+# editor 删除共享主表草稿
 curl -X DELETE http://localhost:6768/api/admin/news/13 \
   -H 'Authorization: Bearer {editor_token}'
 ```
@@ -1296,13 +1303,13 @@ Admin Law 响应**不再**包含 `filename` 或 `secure_name`，改为：
 |------|------|
 | editor CREATE | INSERT laws (status='draft')，文件写本地 tmp，不操作 OSS |
 | editor UPDATE 已发布 | laws 行不变（public 可见旧数据），INSERT/UPDATE `laws_drafts` + `pending_file_name` |
-| editor UPDATE 自己 draft | 直接 UPDATE laws 行 |
-| admin 直接修改 published | UPDATE laws，直接操作 OSS（上传/复制/覆盖/删除） |
-| admin 修改 draft | 只更新主表和 `pending_file_name`，不发布，不操作 OSS |
+| admin/editor UPDATE 主表 draft | 直接 UPDATE laws 行，保持待审核 |
+| admin UPDATE published（无 LawDraft） | UPDATE laws，直接操作 OSS（上传/复制/覆盖/删除） |
+| admin/editor UPDATE published（有 LawDraft） | 更新同一份共享 LawDraft；待审文件仅存本地 tmp，不修改正式 OSS |
 | admin APPROVE | 发布主表 draft，或合并 LawDraft 数据并上传待审文件 → published |
 | admin DISCARD draft | 删除 LawDraft + 临时文件，保留主版本 |
 
-> admin 创建时直接 `published`，修改已发布记录立即生效；修改主表 draft 不会隐式批准，仍需调用 approve。已有 pending LawDraft 的 published 法规会返回 409。editor 创建的记录和对 published 的修改均进入待审核状态。
+> admin 创建时直接 `published`，修改无 LawDraft 的已发布记录立即生效；修改主表 draft 或已有的共享 LawDraft 不会隐式批准，仍需调用 approve。editor 创建的记录和对 published 的修改均进入待审核状态。
 
 ---
 
@@ -1486,10 +1493,9 @@ Content-Type: **`multipart/form-data`**
 
 **处理逻辑：**
 - **admin 修改 published（无 pending draft）**：直接更新主表和 OSS（同名覆盖、跨 key 替换、纯名称 copy+delete）。
-- **admin 修改 published（已存在 LawDraft）**：返回 409，要求先审核或丢弃草稿。
-- **admin 修改 draft**：只更新主表和 `pending_file_name`，不发布。
-- **editor 修改 published**：写入 LawDraft 表 + `pending_file_name`；主表和 OSS 保持不变。
-- **editor 修改自己 draft**：直接更新 Law 行。
+- **admin/editor 修改 published（已存在 LawDraft）**：在当前待审快照上更新同一份共享 LawDraft；新文件写入本地 tmp，主表和正式 OSS 保持不变，仍需 approve 才发布。
+- **admin/editor 修改主表 draft**：直接更新 Law 行和 `pending_file_name`，不发布、不操作 OSS。
+- **editor 修改 published（无 LawDraft）**：创建 LawDraft 并按需写入 `pending_file_name`；主表和 OSS 保持不变。
 
 ```bash
 curl -X PUT http://localhost:6768/api/admin/laws/1 \
@@ -1518,18 +1524,6 @@ curl -X PUT http://localhost:6768/api/admin/laws/1 \
         }
     },
     "message": "更新成功"
-}
-```
-
-**409 Conflict（存在待审草稿）：**
-
-```json
-{
-    "success": false,
-    "error": {
-        "code": "CONFLICT",
-        "message": "法规有待审核修改，请先审核或丢弃草稿"
-    }
 }
 ```
 

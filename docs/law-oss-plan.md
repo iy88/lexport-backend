@@ -88,7 +88,7 @@ LAW_OSS_BUCKET_NAME=your-law-knowledge-base-bucket
   - `approved: [id...]`
   - `failed: [{id, code, message}...]`
 - 新增 admin-only `DELETE /api/admin/laws/{id}/draft`，丢弃 editor 待审修改并删除对应临时文件，保留线上主版本。
-- 已存在 LawDraft 时，admin 直接 PUT 主版本返回 409，要求先 approve 或 discard。
+- 已存在 LawDraft 时，admin 与 editor 通过 PUT 更新同一份共享离线 Draft；主版本和正式 OSS 保持不变，直到 admin approve。
 
 ## 3. 文件与 Draft 生命周期
 
@@ -114,9 +114,10 @@ LAW_OSS_BUCKET_NAME=your-law-knowledge-base-bucket
   - 替换文件且 object name 改变：保存新临时文件，上传新对象，删除旧对象，再提交数据库；失败时恢复旧对象并删除新对象。
   - 替换文件且 object name 不变：先把旧对象下载到本地回滚临时文件，再直接 PUT 覆盖；数据库失败则重新上传旧文件恢复。
 - Admin 修改 draft：只更新主表草稿和 `pending_file_name`，不发布、不操作 OSS，必须显式 approve。
+- Admin 修改已有 LawDraft：以当前待审快照为基础更新 `LawDraft.data`；新文件写入 `LawDraft.pending_file_name`，不修改主表或正式 OSS，必须显式 approve。替换待审文件时，数据库提交成功后清理旧临时文件。
 - Editor 修改 published：
   - 主表保持 published。
-  - 业务字段写入或更新 `LawDraft.data`。
+  - 与其他 editor 和 admin 共享同一份 LawDraft，业务字段写入或更新 `LawDraft.data`。
   - 新文件写入 `LawDraft.pending_file_name`；替换旧待审文件时，数据库提交成功后清理旧临时文件。
 - Editor 修改未发布 draft：直接更新 Law 和 `Law.pending_file_name`，保持 draft。
 

@@ -8,7 +8,7 @@ from app.models.draft import AgencyDraft, NewsDraft
 from app.models.news import News, NewsTag, NewsTagRelation
 from app.models.user import User
 from app.services import admin_service
-from app.utils.errors import ConflictError, ValidationError
+from app.utils.errors import ValidationError
 
 
 def _seed_content_refs(db):
@@ -119,6 +119,53 @@ def test_published_news_draft_merges_editors_and_publishes_atomically(
         assert NewsDraft.query.filter_by(news_id=news_id).first() is None
 
 
+def test_admin_updates_existing_shared_news_draft(
+        app, db, client, editor_user, admin_user):
+    with app.app_context():
+        tags = _seed_content_refs(db)
+        editor = db.session.get(User, editor_user[0].id)
+        admin = db.session.get(User, admin_user[0].id)
+        news_id = admin_service.create_news(
+            _news_payload(tag_ids=[tags[0].id]), admin,
+        )
+
+        admin_service.update_news(news_id, {
+            'title': '编辑修改的标题',
+            'summary': '编辑修改的摘要',
+        }, editor)
+        response = client.put(
+            f'/api/admin/news/{news_id}',
+            json={
+                'content': '管理员修改的正文',
+                'tag_ids': [tags[1].id],
+            },
+            headers={'Authorization': f'Bearer {admin_user[1]}'},
+        )
+
+        assert response.status_code == 200
+        live = db.session.get(News, news_id)
+        assert live.title == '原始标题'
+        assert live.summary == '原始摘要'
+        assert db.session.get(NewsText, news_id).content == '原始正文'
+        assert [row.tag_id for row in NewsTagRelation.query.filter_by(
+            news_id=news_id,
+        ).all()] == [tags[0].id]
+
+        draft = NewsDraft.query.filter_by(news_id=news_id).one()
+        assert draft.data['title'] == '编辑修改的标题'
+        assert draft.data['summary'] == '编辑修改的摘要'
+        assert draft.data['content'] == '管理员修改的正文'
+        assert draft.data['tag_ids'] == [tags[1].id]
+        assert draft.editor_id == admin.id
+
+        preview = response.get_json()['data']['item']
+        assert preview['status'] == 'published'
+        assert preview['has_draft'] is True
+        assert preview['review_status'] == 'pending'
+        assert preview['content'] == '管理员修改的正文'
+        assert [tag['id'] for tag in preview['tags']] == [tags[1].id]
+
+
 def test_news_batch_approval_applies_content_and_tags(app, db, editor_user):
     with app.app_context():
         tags = _seed_content_refs(db)
@@ -143,11 +190,12 @@ def test_news_batch_approval_applies_content_and_tags(app, db, editor_user):
             assert NewsDraft.query.filter_by(news_id=news_id).first() is None
 
 
-def test_admin_cannot_bypass_pending_agency_draft(app, db, editor_user):
+def test_admin_updates_existing_shared_agency_draft(
+        app, db, client, editor_user, admin_user):
     with app.app_context():
         _seed_content_refs(db)
         editor = db.session.get(User, editor_user[0].id)
-        admin = User(username='admin-shape', role='admin')
+        admin = db.session.get(User, admin_user[0].id)
         agency_id = admin_service.create_item(Agency, {
             'name': '原机构', 'scene_id': 'legal-advice',
         }, admin)['item']['id']
@@ -156,11 +204,28 @@ def test_admin_cannot_bypass_pending_agency_draft(app, db, editor_user):
             Agency, AgencyDraft, agency_id, {'name': '待审核机构'}, editor,
             'agency_id',
         )
-        with pytest.raises(ConflictError):
-            admin_service.update_item_with_draft(
-                Agency, AgencyDraft, agency_id, {'name': '管理员覆盖'}, admin,
-                'agency_id',
-            )
+        response = client.put(
+            f'/api/admin/agencies/{agency_id}',
+            json={'region': '南非'},
+            headers={'Authorization': f'Bearer {admin_user[1]}'},
+        )
+
+        assert response.status_code == 200
+        live = db.session.get(Agency, agency_id)
+        assert live.name == '原机构'
+        assert live.region is None
+
+        draft = AgencyDraft.query.filter_by(agency_id=agency_id).one()
+        assert draft.data['name'] == '待审核机构'
+        assert draft.data['region'] == '南非'
+        assert draft.editor_id == admin.id
+
+        preview = response.get_json()['data']['item']
+        assert preview['name'] == '待审核机构'
+        assert preview['region'] == '南非'
+        assert preview['status'] == 'published'
+        assert preview['has_draft'] is True
+        assert preview['review_status'] == 'pending'
 
 
 def test_editor_created_agency_main_draft_is_shared(app, db, editor_user):

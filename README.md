@@ -401,6 +401,24 @@ DELETE /api/compliance-reports/{id}
 
 详见 [docs/api.md](docs/api.md)。
 
+## 打包发布
+
+使用 `git archive` 将当前分支最新提交打包为 `.tar.gz`，方便部署交付：
+
+```bash
+# 打包当前分支 HEAD，输出 lexport-backend-<commit>.tar.gz
+git archive --format=tar.gz --prefix=lexport-backend/ -o lexport-backend-$(git rev-parse --short HEAD).tar.gz HEAD
+
+# 打包指定 tag（如 v1.0.0）
+git archive --format=tar.gz --prefix=lexport-backend/ -o lexport-backend-v1.0.0.tar.gz v1.0.0
+
+# 仅打包某个子目录
+git archive --format=tar.gz --prefix=lexport-backend/ -o lexport-backend-app.tar.gz HEAD app/
+```
+
+> `--prefix` 确保解压后所有文件位于 `lexport-backend/` 目录下，避免解压到当前目录造成混乱。
+> `git archive` 只包含 Git 跟踪的文件，`.env`、`uploads/`、`logs/`、`.venv/` 等不会进入压缩包。
+
 ## 数据库设计
 
 > 备份: `mysqldump --set-gtid-purged=OFF -u root -p lexport > sql/bkup.sql`

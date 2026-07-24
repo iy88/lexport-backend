@@ -208,17 +208,89 @@ class TestUpdateLaw:
             assert result['item']['object_name'] == '法规X.pdf'
 
     @_mock_oss
-    def test_admin_cannot_update_with_pending_draft(self, app, admin_user, editor_user):
-        """Admin PUT on published law with existing LawDraft should 409."""
-        data = {'title_cn': '冲突法规', 'country_id': 'ZA', 'scene_id': 'customs'}
+    def test_admin_updates_existing_shared_draft(self, app, admin_user, editor_user):
+        """Admin PUT should extend the shared draft without changing the live row."""
+        data = {'title_cn': '共享草稿法规', 'country_id': 'ZA', 'scene_id': 'customs'}
         with app.app_context():
             law = create_law(data, None, admin_user[0])
             lid = law['item']['id']
-            # Editor creates a draft.
+
             update_law(lid, {'summary': 'editor change'}, None, editor_user[0])
-            # Admin tries to update directly — should fail.
-            with pytest.raises(ConflictError, match='待审核'):
-                update_law(lid, {'summary': 'admin change'}, None, admin_user[0])
+            original_draft = LawDraft.query.filter_by(law_id=lid).one()
+            original_draft_id = original_draft.id
+
+            result = update_law(
+                lid, {'law_number': 'ADMIN-001'}, None, admin_user[0],
+            )
+
+            assert result['item']['status'] == 'published'
+            assert result['item']['has_draft'] is True
+            assert result['item']['review_status'] == 'pending'
+            assert result['item']['summary'] == 'editor change'
+            assert result['item']['law_number'] == 'ADMIN-001'
+
+            # The public/live version stays untouched until explicit approval.
+            live = db.session.get(Law, lid)
+            assert live.summary is None
+            assert live.law_number is None
+
+            shared_draft = LawDraft.query.filter_by(law_id=lid).one()
+            assert shared_draft.id == original_draft_id
+            assert shared_draft.data['summary'] == 'editor change'
+            assert shared_draft.data['law_number'] == 'ADMIN-001'
+            assert shared_draft.editor_id == admin_user[0].id
+
+    @_mock_oss
+    def test_admin_replaces_file_in_existing_shared_draft(
+            self, app, admin_user, editor_user):
+        data = {'title_cn': '共享文件法规', 'country_id': 'ZA', 'scene_id': 'customs'}
+        with app.app_context():
+            law = create_law(data, _file(b'published', 'published.pdf'), admin_user[0])
+            lid = law['item']['id']
+            live_object_name = law['item']['object_name']
+
+            update_law(
+                lid,
+                {'summary': 'editor metadata'},
+                _file(b'editor pending', 'editor.pdf'),
+                editor_user[0],
+            )
+            original_draft = LawDraft.query.filter_by(law_id=lid).one()
+            original_draft_id = original_draft.id
+            old_pending = original_draft.pending_file_name
+            old_path = os.path.join(
+                app.config['UPLOAD_PATH'], 'tmp', 'laws', old_pending,
+            )
+            assert os.path.isfile(old_path)
+
+            result = update_law(
+                lid,
+                {'title_cn': '管理员修订名称'},
+                _file(b'admin pending', 'admin.PDF'),
+                admin_user[0],
+            )
+
+            shared_draft = LawDraft.query.filter_by(law_id=lid).one()
+            new_path = os.path.join(
+                app.config['UPLOAD_PATH'], 'tmp', 'laws',
+                shared_draft.pending_file_name,
+            )
+            assert shared_draft.id == original_draft_id
+            assert shared_draft.pending_file_name != old_pending
+            assert shared_draft.data['summary'] == 'editor metadata'
+            assert shared_draft.data['title_cn'] == '管理员修订名称'
+            assert shared_draft.editor_id == admin_user[0].id
+            assert not os.path.exists(old_path)
+            assert os.path.isfile(new_path)
+            with open(new_path, 'rb') as pending_file:
+                assert pending_file.read() == b'admin pending'
+
+            live = db.session.get(Law, lid)
+            assert live.title_cn == '共享文件法规'
+            assert live.summary is None
+            assert live.object_name == live_object_name
+            assert result['item']['has_pending_file'] is True
+            assert result['item']['pending_object_name'] == '管理员修订名称.pdf'
 
     @_mock_oss
     def test_editor_update_published_creates_draft(self, app, admin_user, editor_user):

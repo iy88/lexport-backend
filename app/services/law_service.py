@@ -589,17 +589,16 @@ def update_law(law_id, data, file_storage, user):
     law = _lock_law(law_id)
     existing_draft = LawDraft.query.filter_by(law_id=law_id).first()
 
-    if is_admin and law.status == 'published' and existing_draft:
-        raise ConflictError('法规有待审核修改，请先审核或丢弃草稿')
-
-    if is_admin and law.status == 'published':
+    if law.status == 'published':
+        if existing_draft or not is_admin:
+            return _update_published_draft(
+                law, data, file_storage, user, existing_draft,
+            )
         return _admin_update_published(law, data, file_storage)
-    elif is_admin and law.status == 'draft':
+
+    if is_admin:
         return _admin_update_draft(law, data, file_storage)
-    elif not is_admin and law.status == 'published':
-        return _editor_update_published(law, data, file_storage, user)
-    else:  # editor on own draft
-        return _editor_update_draft(law, data, file_storage)
+    return _editor_update_draft(law, data, file_storage)
 
 
 def _admin_update_published(law, data, file_storage):
@@ -698,10 +697,9 @@ def _admin_update_draft(law, data, file_storage):
         raise
 
 
-def _editor_update_published(law, data, file_storage, user):
-    """Editor modifying a published law → write to LawDraft table."""
-    draft = LawDraft.query.filter_by(law_id=law.id).first()
-    # Preserve earlier editor changes when a draft is updated incrementally.
+def _update_published_draft(law, data, file_storage, user, draft=None):
+    """Apply an admin/editor change to a published law's shared draft."""
+    # Preserve earlier changes when the shared draft is updated incrementally.
     full = dict(draft.data) if draft and draft.data else {
         'title_cn': law.title_cn,
         'title_en': law.title_en,
@@ -742,7 +740,7 @@ def _editor_update_published(law, data, file_storage, user):
 
 
 def _editor_update_draft(law, data, file_storage):
-    """Editor updating their own draft — direct update of Law row."""
+    """Editor updating the shared main-table draft directly."""
     old_pending = law.pending_file_name
     new_pending = None
     try:

@@ -72,7 +72,7 @@
 | `law_id` | BIGINT | UNIQUE, FK → laws.id ON DELETE CASCADE | 关联法规 |
 | `data` | JSON | NOT NULL | 待审业务字段（不含 `filename`/`secure_name`/`object_name`/临时路径） |
 | `pending_file_name` | VARCHAR(500) | | 待审核文件本地临时文件名（UUID.ext） |
-| `editor_id` | BIGINT | FK → users.id | 编辑者 |
+| `editor_id` | BIGINT | FK → users.id | 最后修改者（admin/editor） |
 | `created_at` | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | `updated_at` | DATETIME | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
 
@@ -157,7 +157,7 @@
 | `id` | BIGINT | PK, AUTO_INCREMENT | 主键 |
 | `news_id` | BIGINT | UNIQUE, FK → news.id ON DELETE CASCADE | 关联资讯 |
 | `data` | JSON | NOT NULL | 完整行数据（待审批） |
-| `editor_id` | BIGINT | FK → users.id | 编辑者 |
+| `editor_id` | BIGINT | FK → users.id | 最后修改者（admin/editor） |
 | `created_at` | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | `updated_at` | DATETIME | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
 
@@ -222,7 +222,7 @@
 | `id` | BIGINT | PK, AUTO_INCREMENT | 主键 |
 | `agency_id` | BIGINT | UNIQUE, FK → agencies.id ON DELETE CASCADE | 关联机构 |
 | `data` | JSON | NOT NULL | 完整行数据（待审批） |
-| `editor_id` | BIGINT | FK → users.id | 编辑者 |
+| `editor_id` | BIGINT | FK → users.id | 最后修改者（admin/editor） |
 | `created_at` | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | `updated_at` | DATETIME | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
 
